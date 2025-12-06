@@ -7,6 +7,7 @@ from rich import print
 title = pyfiglet.figlet_format('Saturn', font='slant')
 titleLauncher = pyfiglet.figlet_format("Launcher", font="slant")
 print(f'[green]{title}[/green] \n [yellow]{titleLauncher}[/yellow]')
+print("type 'saturn --help' to help")
 
 # GET VERSION DATA
 try:
@@ -17,6 +18,7 @@ except Exception as e:
     exit()
 
 # Shell Commands
+saturn_help = "saturn --help"
 saturn_display_versions = "saturn --versions"
 saturn_snapshot_versions = "saturn --snapshots"
 saturn_forge_versions = "saturn --forge"
@@ -168,6 +170,22 @@ while True:
         print("Goodbye")
         break
 
+    # ================================
+    # HELP 
+    # ================================
+    elif shell_commands == saturn_help:
+        help_title = pyfiglet.figlet_format('Help tutorial', font='slant') 
+        print(f"[cyan]{help_title}[/cyan]")
+        print("'saturn --versions' display release stable all versions")
+        print("'saturn --snapshots' display all snaphots version")
+        print("'saturn --forge' display all forge version")
+        print("'saturn --fabric' display all fabric version")
+        print("'saturn --latest' display latest stable version")
+        print("'saturn --start' start launch logic")
+
+        print("\nafter 'saturn --start' type 'x.x.x' version to install/launch release stable version")
+        print("\nif you need forge/fabric version type 'forge-x.x.x' or 'fabric-x.x.x'")
+
     else:
-        print("ERROR: Unknown command")
+        print("[red]ERROR: Unknown command[/red]")
 

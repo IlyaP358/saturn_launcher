@@ -1,0 +1,7 @@
+minecraft_launcher_lib
+subprocess
+uuid
+pyfiglet
+rich
+pyinstaller
+
