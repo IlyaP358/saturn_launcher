@@ -3,5 +3,3 @@ venv
 logs
 build
 dist
-saturn_windows.spec
-saturn_linux.spec
