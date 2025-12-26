@@ -3,3 +3,4 @@ venv
 logs
 build
 dist
+__pycache__

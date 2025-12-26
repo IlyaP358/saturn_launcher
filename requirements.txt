@@ -4,4 +4,4 @@ uuid
 pyfiglet
 rich
 pyinstaller
-
+pillow
