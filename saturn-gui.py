@@ -58,7 +58,7 @@ class Ui_MainWindow(object):
         self.mainLayout.addLayout(self.inputLayout)
 
         # Set background image
-        self.centralwidget.setStyleSheet("#centralwidget { background-image: url(saturn-background.png); background-repeat: no-repeat; background-size: 100% 100%; }")
+        self.centralwidget.setStyleSheet("#centralwidget { background-image: url(saturn-background.png); background-repeat: no-repeat; background-attachment: fixed; background-size: cover; background-position: center; }")
 
         MainWindow.setCentralWidget(self.centralwidget)
         self.menubar = QMenuBar(MainWindow)

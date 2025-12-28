@@ -1,8 +1,9 @@
 minecraft_launcher_lib
-subprocess
 uuid
 pyfiglet
 rich
 pyinstaller
 pillow
 PySide6
+psutil
+pyreadline3

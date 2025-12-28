@@ -4,11 +4,18 @@ import uuid
 import pyfiglet
 import os
 import json
+import psutil
 from rich import print
 from rich.console import Console
 from rich.text import Text
-from rich.progress import Progress
+from rich.progress import Progress, SpinnerColumn, TextColumn, track, BarColumn
 from image_ascii import get_logo_lines
+
+#remember commands history
+try:
+    import readline
+except ImportError:
+    import pyreadline3
 
 try:
     console = Console()
@@ -34,22 +41,17 @@ try:
 
 # Print side by side line by line
     spacing = 3 # spaces between logo and text
-    for logo_line, text_line in zip(logo_lines, padded_text_lines):
-        if text_line.strip():  # If text line has content
-            # Determine color
-            actual_index = padding_top + padded_text_lines.index(text_line) - padding_top
-            if actual_index < len(saturn_lines):
-                colored_text = f'[green]{text_line}[/green]'
-            elif actual_index >= len(saturn_lines) + 1:
-                colored_text = f'[yellow]{text_line}[/yellow]'
-            else:
-                colored_text = text_line
-            combined_line = logo_line + ' ' * spacing + colored_text
+    for idx, (logo_line, text_line) in enumerate(zip(logo_lines, padded_text_lines)):
+        text_idx = idx - padding_top
+        
+        if text_idx < len(saturn_lines):
+            console.print(logo_line + ' ' * spacing, Text(text_line, style="green"), sep='')
+        elif text_idx >= len(saturn_lines) + 1:
+            console.print(logo_line + ' ' * spacing, Text(text_line, style="yellow"), sep='')
         else:
-            combined_line = logo_line + ' ' * spacing + text_line
-        console.print(combined_line)
+            console.print(logo_line + ' ' * spacing + text_line)
 
-    print("type 'saturn --help' to help")
+    print("'saturn --help' to help")
 
 # GET VERSION DATA
     try:
@@ -73,13 +75,14 @@ try:
     saturn_fabric_versions = "saturn --fabric"
     saturn_latest_versions = "saturn --latest"
     saturn_ram = "saturn --ram"
+    saturn_ram_auto = "saturn --ram auto"
     start_launcher = "saturn --start"
     saturn_installed = "saturn --installed"
     exit_command = "exit"
 
 # MAIN LOOP
     while True:
-        shell_commands = input("\ntype command: ").strip()
+        shell_commands = input("\nenter command: ").strip()
 
         # ================================
         # VANILLA RELEASE VERSIONS
@@ -98,7 +101,7 @@ try:
             print("\n[magenta]Snapshot versions for all supported Minecraft versions:[/magenta]")
             snapshot_versions = [v["id"] for v in versions_data if v["type"] == "snapshot"]
             for mc_version in reversed(snapshot_versions):
-                print(f"[magenta]Snapshot {mc_version}[/magenta]")
+                print(f"[magenta]{mc_version}[/magenta]")
 
         # ================================
         # FORGE VERSIONS LIST
@@ -160,16 +163,29 @@ try:
             if 'max' not in config['ram']:
                 config['ram']['max'] = '2048M'
 
-            # Save updated config
-            with open('config.json', 'w') as f:
-                json.dump(config, f, indent=4)
-
             min_ram = config['ram']['min']
             max_ram = config['ram']['max']
+
+            # Calculate current RAM usage percentage
+            if 'G' in max_ram:
+                current_gb = int(max_ram.replace('G', ''))
+            elif 'M' in max_ram:
+                current_gb = int(max_ram.replace('M', '')) / 1024
+            else:
+                current_gb = int(max_ram) / 1024  # assume MB
+
+            total_gb = psutil.virtual_memory().total // (1024**3)
+            percentage = min(100, (current_gb / total_gb) * 100)
+
+            # Show progress bar for current usage
+            with Progress(BarColumn(), TextColumn("[progress.description]{task.description}")) as progress:
+                task = progress.add_task(f"RAM usage: {percentage:.1f}% of system RAM", total=100)
+                progress.update(task, completed=int(percentage))
 
             print(f"[cyan]Current RAM settings:[/cyan]")
             print(f"Min RAM: [green]{min_ram}[/green]")
             print(f"Max RAM: [yellow]{max_ram}[/yellow]")
+            print(f"System RAM: [blue]{total_gb}G[/blue]")
 
             # Ask for new max RAM
             new_max = input("Enter max RAM (example: 2G, 4G, 1024M) or press Enter to keep current: ").strip()
@@ -178,6 +194,39 @@ try:
                 with open('config.json', 'w') as f:
                     json.dump(config, f, indent=4)
                 print(f"[green]Max RAM updated to: {new_max}[/green]")
+
+        # ================================
+        # AUTO RAM
+        # ================================
+        elif shell_commands == saturn_ram_auto:
+            try:
+                with open('config.json', 'r') as f:
+                    config = json.load(f)
+            except (FileNotFoundError, json.JSONDecodeError):
+                config = {}
+
+            # Ensure ram settings exist in config
+            if 'ram' not in config:
+                config['ram'] = {}
+            if 'min' not in config['ram']:
+                config['ram']['min'] = '1024M'
+
+            # Auto RAM selection
+            total = psutil.virtual_memory().total // (1024**3)
+            recommended = max(2, total // 2)
+            recommended_str = f"{recommended}G"
+
+            print(f"[blue]Total system RAM: {total}G[/blue]")
+            print(f"[green]Recommended max RAM for Minecraft: {recommended_str}[/green]")
+            confirm = input(f"Set max RAM to {recommended_str}? (y/n): ").strip().lower()
+            if confirm == 'y':
+                config['ram']['max'] = recommended_str
+                with open('config.json', 'w') as f:
+                    json.dump(config, f, indent=4)
+                print(f"[green]Max RAM updated to: {recommended_str}[/green]")
+            else:
+                print("[yellow]RAM settings unchanged.[/yellow]")
+
 
         # ================================
         # START LAUNCHER (AUTO VANILLA / FORGE / FABRIC)
@@ -210,7 +259,11 @@ try:
                         version = installed_version
                     else:
                         print(f"Installing Forge for Minecraft {mc_version}...")
-                        with Progress() as progress:
+                        with Progress(
+                            SpinnerColumn(),
+                            TextColumn("[progress.description]{task.description}"),
+                            transient=True,
+                        ) as progress:
                             task = progress.add_task("Installing Forge...", total=None)
                             minecraft_launcher_lib.forge.install_forge_version(
                                 forge_version,
@@ -236,7 +289,11 @@ try:
                 else:
                     print(f"Installing Fabric {loader_version} for Minecraft {mc_version}...")
                     try:
-                        with Progress() as progress:
+                        with Progress(
+                            SpinnerColumn(),
+                            TextColumn("[progress.description]{task.description}"),
+                            transient=True,
+                        ) as progress:
                             task = progress.add_task("Installing Fabric...", total=None)
                             minecraft_launcher_lib.fabric.install_fabric(
                                 mc_version,
@@ -258,7 +315,11 @@ try:
                 else:
                     print(f"Installing Minecraft {version}...")
                     try:
-                        with Progress() as progress:
+                        with Progress(
+                            SpinnerColumn(),
+                            TextColumn("[progress.description]{task.description}"),
+                            transient=True,
+                        ) as progress:
                             task = progress.add_task("Installing Minecraft...", total=None)
                             minecraft_launcher_lib.install.install_minecraft_version(
                                 version=version,
@@ -321,7 +382,8 @@ try:
             print("'saturn --fabric' display all fabric version")
             print("'saturn --latest' display latest stable version")
             print("'saturn --ram' display current RAM settings")
-            print("'saturn --start' start launch logic")
+            print("'saturn --ram auto' to automatically set best amount RAM to your system")
+            print("'saturn --start' initialize and start the Minecraft")
             print("'saturn --installed' to display all installed versions")
             print("\ntype 'exit' to exit launcher")
 
