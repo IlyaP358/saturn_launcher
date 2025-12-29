@@ -2,5 +2,11 @@
     "ram": {
         "min": "1024M",
         "max": "7G"
-    }
+    },
+    "show_forge": true,
+    "show_fabric": false,
+    "show_snapshots": false,
+    "last_version": "forge-1.20.1",
+    "last_username": "IlyaPablo",
+    "background_path": "/home/illium/test_scripts/saturn_launcher/saturn-background.png"
 }
