@@ -5,10 +5,12 @@ import pyfiglet
 import os
 import json
 import psutil
+import requests
 from rich import print
 from rich.console import Console
 from rich.text import Text
 from rich.progress import Progress, SpinnerColumn, TextColumn, track, BarColumn
+from rich.table import Table
 from image_ascii import get_logo_lines
 
 #remember commands history
@@ -66,6 +68,11 @@ try:
         os.makedirs("saturn_launcher/versions")
     versions_print = os.listdir("saturn_launcher/versions")
     versions_dir = os.path.abspath("saturn_launcher/versions")
+
+# mods directory
+    mods_dir = "saturn_launcher/mods"
+    if not os.path.exists(mods_dir):
+        os.makedirs(mods_dir)
 
 # Shell Commands
     saturn_help = "saturn --help"
@@ -389,6 +396,148 @@ try:
 
             print("\nafter 'saturn --start' type 'x.x.x' version to install/launch release stable version")
             print("\nif you need forge/fabric version type 'forge-x.x.x' or 'fabric-x.x.x'")
+            print("\nMod commands:")
+            print("'saturn --mods search <name>' search for mods on Modrinth")
+            print("'saturn --mods install <name> <mc_version> <loader>' install mod")
+            print("'saturn --mods list' list installed mods")
+            print("'saturn --mods remove <name>' remove mod")
+
+        # ================================
+        # MODS MANAGEMENT
+        # ================================
+        elif shell_commands.startswith("saturn --mods"):
+            parts = shell_commands.split()
+            if len(parts) < 3:
+                print("[red]Invalid mod command. Use 'saturn --mods search/install/list/remove'[/red]")
+                continue
+
+            subcommand = parts[2]
+
+            if subcommand == "search":
+                if len(parts) < 4:
+                    print("[red]Usage: saturn --mods search <mod_name>[/red]")
+                    continue
+                mod_name = " ".join(parts[3:])
+                try:
+                    # Search Modrinth API
+                    url = f"https://api.modrinth.com/v2/search?query={mod_name}&limit=10"
+                    response = requests.get(url)
+                    response.raise_for_status()
+                    data = response.json()
+
+                    if not data.get("hits"):
+                        print(f"[yellow]No mods found for '{mod_name}'[/yellow]")
+                        continue
+
+                    table = Table(title=f"Search results for '{mod_name}'")
+                    table.add_column("Name", style="cyan", no_wrap=True)
+                    table.add_column("Description", style="white")
+                    table.add_column("Downloads", style="green")
+                    table.add_column("Categories", style="magenta")
+
+                    for hit in data["hits"]:
+                        name = hit.get("title", "Unknown")
+                        desc = hit.get("description", "No description")[:50] + "..." if len(hit.get("description", "")) > 50 else hit.get("description", "No description")
+                        downloads = f"{hit.get('downloads', 0):,}"
+                        categories = ", ".join(hit.get("categories", []))
+                        table.add_row(name, desc, downloads, categories)
+
+                    console.print(table)
+                except Exception as e:
+                    print(f"[red]Error searching mods: {e}[/red]")
+
+            elif subcommand == "install":
+                if len(parts) < 6:
+                    print("[red]Usage: saturn --mods install <mod_name> <mc_version> <loader>[/red]")
+                    continue
+                mod_name = " ".join(parts[3:-2])
+                mc_version = parts[-2]
+                loader = parts[-1]
+
+                try:
+                    # Search for the mod
+                    url = f"https://api.modrinth.com/v2/search?query={mod_name}&limit=5"
+                    response = requests.get(url)
+                    response.raise_for_status()
+                    data = response.json()
+
+                    if not data.get("hits"):
+                        print(f"[red]No mod found for '{mod_name}'[/red]")
+                        continue
+
+                    # Take the first result
+                    project = data["hits"][0]
+                    project_id = project["project_id"]
+                    mod_title = project["title"]
+
+                    # Get versions
+                    version_url = f"https://api.modrinth.com/v2/project/{project_id}/version?game_versions=[\"{mc_version}\"]&loaders=[\"{loader}\"]"
+                    version_response = requests.get(version_url)
+                    version_response.raise_for_status()
+                    versions = version_response.json()
+
+                    if not versions:
+                        print(f"[red]No compatible version found for {mod_title} on MC {mc_version} with {loader}[/red]")
+                        continue
+
+                    # Take the latest version
+                    version_data = versions[0]
+                    primary_file = version_data["files"][0]
+                    download_url = primary_file["url"]
+                    filename = primary_file["filename"]
+
+                    # Download
+                    print(f"[cyan]Downloading {mod_title} ({filename})...[/cyan]")
+                    with requests.get(download_url, stream=True) as r:
+                        r.raise_for_status()
+                        total_size = int(r.headers.get('content-length', 0))
+                        with open(os.path.join(mods_dir, filename), 'wb') as f:
+                            with Progress(
+                                BarColumn(),
+                                TextColumn("[progress.description]{task.description}"),
+                                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                                transient=True,
+                            ) as progress:
+                                task = progress.add_task(f"Downloading {filename}", total=total_size)
+                                downloaded = 0
+                                for chunk in r.iter_content(chunk_size=8192):
+                                    f.write(chunk)
+                                    downloaded += len(chunk)
+                                    progress.update(task, completed=downloaded)
+
+                    print(f"[green]Installed {mod_title} successfully![/green]")
+                except Exception as e:
+                    print(f"[red]Error installing mod: {e}[/red]")
+
+            elif subcommand == "list":
+                mods = os.listdir(mods_dir)
+                if not mods:
+                    print("[yellow]No mods installed[/yellow]")
+                else:
+                    print("[cyan]Installed mods:[/cyan]")
+                    for mod in sorted(mods):
+                        print(f"[green]{mod}[/green]")
+
+            elif subcommand == "remove":
+                if len(parts) < 4:
+                    print("[red]Usage: saturn --mods remove <mod_name>[/red]")
+                    continue
+                mod_name = " ".join(parts[3:])
+
+                mods = os.listdir(mods_dir)
+                removed = False
+                for mod in mods:
+                    if mod_name.lower() in mod.lower():
+                        os.remove(os.path.join(mods_dir, mod))
+                        print(f"[green]Removed {mod}[/green]")
+                        removed = True
+                        break
+
+                if not removed:
+                    print(f"[red]Mod '{mod_name}' not found[/red]")
+
+            else:
+                print("[red]Unknown mod subcommand. Use search, install, list, or remove[/red]")
 
         else:
             print("[red]ERROR: Unknown command[/red]")

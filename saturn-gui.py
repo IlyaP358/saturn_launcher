@@ -3,7 +3,20 @@ import subprocess
 import uuid
 import json
 import os
+import sys
 import psutil
+import shutil
+
+def get_resource_path(filename):
+    if getattr(sys, 'frozen', False):
+        # Launcher compiled in PyInstaller
+        base_path = sys._MEIPASS
+    else:
+        # Launcher starts with source code 
+        base_path = os.path.dirname(os.path.abspath(__file__))
+
+    return os.path.join(base_path, filename)
+
 from PySide6.QtCore import (QCoreApplication, QDate, QDateTime, QLocale,
     QMetaObject, QObject, QPoint, QRect,
     QSize, QTime, QUrl, Qt, QThread, Signal)
@@ -108,7 +121,18 @@ class Ui_MainWindow(object):
 
         # Load background from config
         config = load_config()
-        background_path = config.get("background_path", "saturn-background.png")
+        bg_file = config.get("background_path", "saturn-background.png")
+
+        # Проверяем существует ли файл
+        if os.path.exists(bg_file):
+            # Уже полный путь (пользовательский фон)
+            background_path = bg_file
+        elif os.path.isabs(bg_file):
+            # Абсолютный путь но не существует, используем дефолт
+            background_path = get_resource_path("saturn-background.png")
+        else:
+            # Относительный путь, ищем в ресурсах
+            background_path = get_resource_path(bg_file)
 
         # Set background image and frame styling
         self.centralwidget.setStyleSheet(f"""
@@ -216,11 +240,7 @@ class LaunchThread(QThread):
                     if not os.path.exists(version_path):
                         print("Forge not installed, installing...")
                         self.show_progress.emit()
-                        try:
-                            minecraft_launcher_lib.forge.install_forge_version(forge_version, minecraft_directory, callback=self.progress_callback)
-                        except Exception as e:
-                            print(f"Forge install with callback failed: {e}, trying without callback")
-                            minecraft_launcher_lib.forge.install_forge_version(forge_version, minecraft_directory)
+                        minecraft_launcher_lib.forge.install_forge_version(forge_version, minecraft_directory)
                         print("Forge installation completed")
                     else:
                         print("Forge already installed")
@@ -275,11 +295,9 @@ class LaunchThread(QThread):
 
             # Load RAM settings
             try:
-                print("Loading config.json...")
-                with open('config.json', 'r') as f:
-                    config = json.load(f)
+                print("Loading config...")
+                config = load_config()
                 print(f"Config loaded: {config}")
-                print(f"Config type: {type(config)}")
                 ram_config = config.get('ram', {})
                 print(f"RAM config: {ram_config}")
                 min_ram = ram_config.get('min', '1024M')
@@ -350,15 +368,42 @@ class LaunchThread(QThread):
 
 
 def load_config():
+    # For compiled version, save config in user's home directory
+    if getattr(sys, 'frozen', False):
+        config_dir = os.path.expanduser("~/.saturn_launcher")
+        if not os.path.exists(config_dir):
+            os.makedirs(config_dir)
+        config_path = os.path.join(config_dir, 'config.json')
+    else:
+        # For development, use config.json in current directory
+        config_path = 'config.json'
+
     try:
-        with open('config.json', 'r') as f:
+        with open(config_path, 'r') as f:
             return json.load(f)
     except:
-        return {"ram": {"min": "1024M", "max": "2048M"}, "show_forge": False, "show_fabric": False, "show_snapshots": False, "last_version": "", "last_username": "", "background_path": "saturn-background.png"}
-
+        return {
+            "ram": {"min": "1024M", "max": "2048M"},
+            "show_forge": False,
+            "show_fabric": False,
+            "show_snapshots": False,
+            "last_version": "",
+            "last_username": "",
+            "background_path": "saturn-background.png"
+        }
 
 def save_config(config):
-    with open('config.json', 'w') as f:
+    # For compiled version, save config in user's home directory
+    if getattr(sys, 'frozen', False):
+        config_dir = os.path.expanduser("~/.saturn_launcher")
+        if not os.path.exists(config_dir):
+            os.makedirs(config_dir)
+        config_path = os.path.join(config_dir, 'config.json')
+    else:
+        # For development, use config.json in current directory
+        config_path = 'config.json'
+
+    with open(config_path, 'w') as f:
         json.dump(config, f, indent=4)
 
 
@@ -585,7 +630,7 @@ def open_settings(parent, ui):
     current_bg_path = config.get("background_path", "saturn-background.png")
     bg_button = QPushButton(f"Background: {os.path.basename(current_bg_path)}")
     bg_button.setToolTip(f"Current background: {current_bg_path}\nClick to change")
-    bg_button.clicked.connect(lambda: change_background(config, bg_button))
+    bg_button.clicked.connect(lambda: change_background(config, bg_button, parent, ui))
     layout.addWidget(bg_button)
 
     layout.addWidget(QLabel(""))  # Spacer
@@ -786,39 +831,73 @@ def delete_version(ui):
         QMessageBox.critical(None, "Error", f"Failed to delete version: {e}")
 
 
-def change_background(config, bg_button):
+def get_backgrounds_dir():
+    """Получить директорию для пользовательских фонов"""
+    # Создаём папку в home директории
+    bg_dir = os.path.expanduser("~/.saturn_launcher/backgrounds")
+    if not os.path.exists(bg_dir):
+        os.makedirs(bg_dir)
+    return bg_dir
+
+
+def change_background(config, bg_button, MainWindow, ui):
     """Change the background image"""
     try:
-        # Get current background path for initial directory
-        current_bg = config.get("background_path", "saturn-background.png")
-        current_dir = os.path.dirname(os.path.abspath(current_bg)) if os.path.exists(current_bg) else ""
-
         # Open file dialog for image selection
         file_dialog = QFileDialog()
         file_dialog.setNameFilter("Images (*.png *.jpg *.jpeg *.bmp *.gif)")
         file_dialog.setWindowTitle("Select Background Image")
-        if current_dir:
-            file_dialog.setDirectory(current_dir)
 
         if file_dialog.exec():
             selected_files = file_dialog.selectedFiles()
             if selected_files:
-                new_bg_path = selected_files[0]
-                print(f"Selected new background: {new_bg_path}")
+                selected_path = selected_files[0]
+                print(f"Selected new background: {selected_path}")
 
-                # Update config
-                config["background_path"] = new_bg_path
+                # Копируем файл в папку пользователя
+                import shutil
+                
+                bg_dir = get_backgrounds_dir()
+                filename = os.path.basename(selected_path)
+                dest_path = os.path.join(bg_dir, filename)
+                
+                # Копируем файл
+                shutil.copy2(selected_path, dest_path)
+                print(f"Background copied to: {dest_path}")
+
+                # Сохраняем полный путь (так как это уже не временная папка)
+                config["background_path"] = dest_path
                 save_config(config)
 
-                # Update button text
-                bg_button.setText(f"Background: {os.path.basename(new_bg_path)}")
-                bg_button.setToolTip(f"Current background: {new_bg_path}\nClick to change")
+                # Обновляем кнопку
+                bg_button.setText(f"Background: {filename}")
+                bg_button.setToolTip(f"Current background: {filename}\nClick to change")
 
-                QMessageBox.information(None, "Success", "Background changed successfully!\n\nRestart the launcher to see the new background.")
+                # Применяем фон немедленно
+                ui.centralwidget.setStyleSheet(f"""
+                    #centralwidget {{
+                        background-image: url({dest_path});
+                        background-repeat: no-repeat;
+                        background-position: center;
+                    }}
+                    #inputFrame {{
+                        background-color: rgba(255, 255, 255, 0.9);
+                        border-radius: 5px;
+                    }}
+                    QComboBox QAbstractItemView {{
+                        min-width: 150px;
+                        max-width: 180px;
+                        padding: 2px;
+                        margin: 0px;
+                    }}
+                """)
+
+                QMessageBox.information(None, "Success", "Background changed successfully!")
 
     except Exception as e:
         QMessageBox.critical(None, "Error", f"Failed to change background: {e}")
-
+        import traceback
+        traceback.print_exc()
 
 def restore_last_username(ui):
     """Restore the last entered username"""
@@ -854,7 +933,7 @@ if __name__ == "__main__":
     ui.deleteButton.clicked.connect(lambda: delete_version(ui))
 
     # Set window icon
-    icon_pixmap = QPixmap("saturn_title.png")
+    icon_pixmap = QPixmap(get_resource_path("saturn_title.png"))
     MainWindow.setWindowIcon(QIcon(icon_pixmap))
 
     # Set logo image in label

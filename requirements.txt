@@ -7,3 +7,4 @@ pillow
 PySide6
 psutil
 pyreadline3
+requests
