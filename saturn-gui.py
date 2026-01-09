@@ -6,6 +6,8 @@ import os
 import sys
 import psutil
 import shutil
+import requests
+from io import BytesIO
 
 def get_resource_path(filename):
     if getattr(sys, 'frozen', False):
@@ -27,7 +29,8 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog,
     QLabel, QLineEdit, QMainWindow, QMenuBar,
     QProgressBar, QPushButton, QSizePolicy, QSlider, QStatusBar, QStyle,
-    QVBoxLayout, QHBoxLayout, QWidget, QMessageBox, QFrame, QFileDialog)
+    QVBoxLayout, QHBoxLayout, QWidget, QMessageBox, QFrame, QFileDialog,
+    QListWidget, QListWidgetItem, QScrollArea)
 
 class Ui_MainWindow(object):
     def __init__(self):
@@ -103,6 +106,15 @@ class Ui_MainWindow(object):
         self.modsButton.setIcon(folder_icon)
         self.buttonsLayout.addStretch()  # Add stretch before buttons to center them
         self.buttonsLayout.addWidget(self.modsButton)
+
+        self.downloadModsButton = QPushButton(self.inputFrame)
+        self.downloadModsButton.setObjectName(u"downloadModsButton")
+        self.downloadModsButton.setText("Download Mods")
+        self.downloadModsButton.setFixedWidth(130)  # Fixed button width
+        # Add download/network icon
+        download_icon = MainWindow.style().standardIcon(QStyle.SP_ComputerIcon)
+        self.downloadModsButton.setIcon(download_icon)
+        self.buttonsLayout.addWidget(self.downloadModsButton)
 
         self.deleteButton = QPushButton(self.inputFrame)
         self.deleteButton.setObjectName(u"deleteButton")
@@ -907,6 +919,537 @@ def restore_last_username(ui):
         ui.lineEdit.setText(last_username)
 
 
+class ModItemWidget(QWidget):
+    """Custom widget for displaying mod information with icon"""
+    def __init__(self, mod_data, parent=None):
+        super().__init__(parent)
+        self.mod_data = mod_data
+        self.setup_ui()
+
+    def setup_ui(self):
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(10)
+
+        # Mod icon
+        self.icon_label = QLabel()
+        self.icon_label.setFixedSize(48, 48)
+        self.icon_label.setStyleSheet("border: 1px solid #ccc; border-radius: 4px;")
+        layout.addWidget(self.icon_label)
+
+        # Mod info
+        info_layout = QVBoxLayout()
+        info_layout.setSpacing(2)
+
+        # Title and author
+        title_text = self.mod_data.get("title", "Unknown Mod")
+        author = self.mod_data.get("author", "Unknown")
+        self.title_label = QLabel(f"{title_text} <span style='font-weight: normal; font-size: 10px; color: #666;'>(by {author})</span>")
+        self.title_label.setStyleSheet("font-weight: bold; font-size: 12px;")
+        info_layout.addWidget(self.title_label)
+
+        # Description
+        desc = self.mod_data.get("description", "No description")
+        if len(desc) > 120:
+            desc = desc[:120] + "..."
+        self.desc_label = QLabel(desc)
+        self.desc_label.setStyleSheet("font-size: 10px; color: #666;")
+        self.desc_label.setWordWrap(True)
+        info_layout.addWidget(self.desc_label)
+
+        # Stats row
+        stats_layout = QHBoxLayout()
+        stats_layout.setSpacing(15)
+
+        # Downloads
+        downloads = self.mod_data.get("downloads", 0)
+        self.downloads_label = QLabel(f"📥 {downloads:,}")
+        self.downloads_label.setStyleSheet("font-size: 9px; color: #888;")
+        stats_layout.addWidget(self.downloads_label)
+
+        # Categories
+        categories = self.mod_data.get("categories", [])
+        if categories:
+            cat_text = ", ".join(categories[:2])  # Show max 2 categories
+            if len(categories) > 2:
+                cat_text += "..."
+            self.categories_label = QLabel(f"🏷️ {cat_text}")
+            self.categories_label.setStyleSheet("font-size: 9px; color: #888;")
+            stats_layout.addWidget(self.categories_label)
+
+        # Last updated
+        date_modified = self.mod_data.get("date_modified", "")
+        if date_modified:
+            try:
+                # Parse and format date
+                from datetime import datetime
+                dt = datetime.fromisoformat(date_modified.replace('Z', '+00:00'))
+                formatted_date = dt.strftime("%b %Y")
+                self.date_label = QLabel(f"🔄 {formatted_date}")
+                self.date_label.setStyleSheet("font-size: 9px; color: #888;")
+                stats_layout.addWidget(self.date_label)
+            except:
+                pass
+
+        stats_layout.addStretch()
+        info_layout.addLayout(stats_layout)
+
+        layout.addLayout(info_layout, 1)
+
+        # Install button
+        self.install_button = QPushButton("Install")
+        self.install_button.setFixedWidth(70)
+        self.install_button.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                padding: 5px;
+                border-radius: 3px;
+                font-size: 10px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+            QPushButton:pressed {
+                background-color: #3d8b40;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+                color: #666666;
+            }
+        """)
+        layout.addWidget(self.install_button)
+
+    def set_icon(self, pixmap):
+        """Set the mod icon"""
+        print(f"set_icon called with pixmap: {pixmap}, isNull: {pixmap.isNull() if pixmap else 'None'}")
+        try:
+            if pixmap and not pixmap.isNull():
+                # Масштабируем изображение
+                scaled_pixmap = pixmap.scaled(48, 48, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                print(f"Scaled pixmap size: {scaled_pixmap.width()}x{scaled_pixmap.height()}")
+
+                # Устанавливаем изображение
+                self.icon_label.setPixmap(scaled_pixmap)
+                print(f"Pixmap set to label")
+
+                # Убираем background color чтобы изображение было видно
+                self.icon_label.setStyleSheet("border: 1px solid #ccc; border-radius: 4px;")
+            else:
+                print(f"Pixmap is null or None, showing default icon")
+                # Default icon
+                self.icon_label.setStyleSheet("border: 1px solid #ccc; border-radius: 4px; background-color: #f0f0f0;")
+                self.icon_label.setText("📦")
+        except Exception as e:
+            print(f"Error in set_icon: {e}")
+            import traceback
+            traceback.print_exc()
+
+
+class ModDownloadThread(QThread):
+    """Thread for downloading mod icons"""
+    icon_loaded = Signal(str, QPixmap)  # project_id, pixmap
+    search_completed = Signal(list)  # list of mod data
+    error_occurred = Signal(str)
+
+    def __init__(self, query=""):
+        super().__init__()
+        self.query = query
+
+    def run(self):
+        try:
+            # Search mods
+            url = f"https://api.modrinth.com/v2/search?query={self.query}&limit=20"
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+
+            mods = []
+            for hit in data.get("hits", []):
+                mod_info = {
+                    "project_id": hit.get("project_id"),
+                    "title": hit.get("title", "Unknown"),
+                    "description": hit.get("description", ""),
+                    "downloads": hit.get("downloads", 0),
+                    "categories": hit.get("categories", []),
+                    "icon_url": hit.get("icon_url"),
+                    "author": hit.get("author", "Unknown"),
+                    "date_created": hit.get("date_created", ""),
+                    "date_modified": hit.get("date_modified", ""),
+                    "gallery": hit.get("gallery", []),
+                    "versions": [],
+                    "loaders": []
+                }
+                mods.append(mod_info)
+
+            # Отправляем моды БЕЗ иконок
+            self.search_completed.emit(mods)
+
+            # ПОТОМ загружаем иконки
+            for mod_info in mods:
+                if mod_info["icon_url"]:
+                    try:
+                        headers = {
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                        }
+                        icon_response = requests.get(
+                            mod_info["icon_url"],
+                            timeout=10,
+                            headers=headers,
+                            allow_redirects=True
+                        )
+                        icon_response.raise_for_status()
+
+                        image_bytes = icon_response.content
+
+                        pixmap = QPixmap()
+                        success = pixmap.loadFromData(image_bytes)
+
+                        if success and not pixmap.isNull():
+                            print(f"Successfully loaded icon for {mod_info['title']}: {pixmap.width()}x{pixmap.height()}")
+                            self.icon_loaded.emit(mod_info["project_id"], pixmap)
+                        else:
+                            print(f"Failed to load icon for {mod_info['title']}: loadFromData returned False")
+
+                    except requests.exceptions.Timeout:
+                        print(f"Timeout loading icon for {mod_info['title']}")
+                    except requests.exceptions.RequestException as e:
+                        print(f"Network error loading icon for {mod_info['title']}: {e}")
+                    except Exception as e:
+                        print(f"Failed to process icon for {mod_info['title']}: {type(e).__name__}: {e}")
+
+        except Exception as e:
+            self.error_occurred.emit(f"Search failed: {str(e)}")
+
+
+class ModInstallThread(QThread):
+    """Thread for installing mods"""
+    progress = Signal(int)
+    finished = Signal(str)  # success message
+    error_occurred = Signal(str)
+
+    def __init__(self, mod_data, mc_version, loader):
+        super().__init__()
+        self.mod_data = mod_data
+        self.mc_version = mc_version
+        self.loader = loader
+
+    def run(self):
+        try:
+            project_id = self.mod_data["project_id"]
+            mod_title = self.mod_data["title"]
+
+            # Get versions
+            version_url = f"https://api.modrinth.com/v2/project/{project_id}/version?game_versions=[\"{self.mc_version}\"]&loaders=[\"{self.loader}\"]"
+            version_response = requests.get(version_url, timeout=10)
+            version_response.raise_for_status()
+            versions = version_response.json()
+
+            if not versions:
+                self.error_occurred.emit(f"No compatible version found for {mod_title} on MC {self.mc_version} with {self.loader}")
+                return
+
+            # Take the latest version
+            version_data = versions[0]
+            primary_file = version_data["files"][0]
+            download_url = primary_file["url"]
+            filename = primary_file["filename"]
+
+            # Create mods directory
+            mods_dir = os.path.abspath("saturn_launcher/mods")
+            if not os.path.exists(mods_dir):
+                os.makedirs(mods_dir)
+
+            # Download
+            self.progress.emit(10)
+            with requests.get(download_url, stream=True, timeout=30) as r:
+                r.raise_for_status()
+                total_size = int(r.headers.get('content-length', 0))
+                filepath = os.path.join(mods_dir, filename)
+
+                with open(filepath, 'wb') as f:
+                    downloaded = 0
+                    for chunk in r.iter_content(chunk_size=8192):
+                        if chunk:
+                            f.write(chunk)
+                            downloaded += len(chunk)
+                            if total_size > 0:
+                                progress = int(10 + (downloaded / total_size) * 90)
+                                self.progress.emit(progress)
+
+            self.progress.emit(100)
+            self.finished.emit(f"Successfully installed {mod_title}!")
+
+        except Exception as e:
+            self.error_occurred.emit(f"Installation failed: {str(e)}")
+
+
+class ModDownloadDialog(QDialog):
+    """Dialog for downloading mods from Modrinth"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.search_thread = None
+        self.install_thread = None
+        self.mod_widgets = {}
+        self.setup_ui()
+
+    def setup_ui(self):
+        self.setWindowTitle("Download Mods - Saturn Launcher")
+        self.resize(800, 600)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(10)
+
+        # Search section
+        search_layout = QHBoxLayout()
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Search for mods...")
+        self.search_input.returnPressed.connect(self.search_mods)
+        search_layout.addWidget(self.search_input)
+
+        self.search_button = QPushButton("Search")
+        self.search_button.clicked.connect(self.search_mods)
+        search_layout.addWidget(self.search_button)
+
+        layout.addLayout(search_layout)
+
+        # Progress bar
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setVisible(False)
+        layout.addWidget(self.progress_bar)
+
+        # Results scroll area
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+
+        self.results_widget = QWidget()
+        self.results_layout = QVBoxLayout(self.results_widget)
+        self.results_layout.setSpacing(5)
+        self.results_layout.setContentsMargins(10, 10, 10, 10)
+
+        # Add stretch at the end
+        self.results_layout.addStretch()
+
+        self.scroll_area.setWidget(self.results_widget)
+        layout.addWidget(self.scroll_area)
+
+        # Status label
+        self.status_label = QLabel("")
+        self.status_label.setStyleSheet("color: #666; font-size: 11px;")
+        layout.addWidget(self.status_label)
+
+        # Buttons
+        buttons_layout = QHBoxLayout()
+        buttons_layout.addStretch()
+
+        self.close_button = QPushButton("Close")
+        self.close_button.clicked.connect(self.accept)
+        buttons_layout.addWidget(self.close_button)
+
+        layout.addLayout(buttons_layout)
+
+    def search_mods(self):
+        query = self.search_input.text().strip()
+        if not query:
+            QMessageBox.warning(self, "Warning", "Please enter a search query")
+            return
+
+        # Clear previous results
+        self.clear_results()
+        self.status_label.setText("Searching...")
+        self.search_button.setEnabled(False)
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setRange(0, 0)  # Indeterminate progress
+
+        # Start search thread
+        self.search_thread = ModDownloadThread(query)
+        self.search_thread.search_completed.connect(self.on_search_completed)
+        self.search_thread.icon_loaded.connect(self.on_icon_loaded)
+        self.search_thread.error_occurred.connect(self.on_search_error)
+        self.search_thread.start()
+
+    def clear_results(self):
+        """Clear all mod widgets"""
+        for widget in self.mod_widgets.values():
+            widget.setParent(None)
+            widget.deleteLater()
+        self.mod_widgets.clear()
+
+    def on_search_completed(self, mods):
+        """Handle search completion"""
+        self.progress_bar.setVisible(False)
+        self.search_button.setEnabled(True)
+
+        if not mods:
+            self.status_label.setText("No mods found")
+            return
+
+        self.status_label.setText(f"Found {len(mods)} mods")
+
+        for mod_data in mods:
+            print(f"Mod: {mod_data['title']}, Icon URL: {mod_data['icon_url']}")
+
+        for mod_data in mods:
+            widget = ModItemWidget(mod_data)
+            widget.install_button.clicked.connect(lambda checked=False, m=mod_data: self.install_mod(m))
+            self.results_layout.addWidget(widget)
+            self.mod_widgets[mod_data["project_id"]] = widget
+
+    def on_icon_loaded(self, project_id, pixmap):
+        """Handle icon loading"""
+        print(f"on_icon_loaded called for project: {project_id}, pixmap: {pixmap}")
+        if project_id in self.mod_widgets:
+            widget = self.mod_widgets[project_id]
+            print(f"Setting icon for widget: {widget}")
+            widget.set_icon(pixmap)
+            print(f"Icon set successfully")
+        else:
+            print(f"Widget not found for project_id: {project_id}")
+
+    def on_search_error(self, error_msg):
+        """Handle search error"""
+        self.progress_bar.setVisible(False)
+        self.search_button.setEnabled(True)
+        self.status_label.setText(f"Error: {error_msg}")
+        QMessageBox.critical(self, "Search Error", error_msg)
+
+    def install_mod(self, mod_data):
+        """Start mod installation"""
+        # First fetch available versions for this mod
+        self.fetch_mod_versions(mod_data)
+
+    def fetch_mod_versions(self, mod_data):
+        """Fetch available versions for a specific mod"""
+        try:
+            project_id = mod_data["project_id"]
+            url = f"https://api.modrinth.com/v2/project/{project_id}"
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+            project_data = response.json()
+
+            # Get available game versions and loaders
+            game_versions = project_data.get("game_versions", [])
+            loaders = project_data.get("loaders", [])
+
+            # Sort versions by semantic version (newest first)
+            def version_key(v):
+                try:
+                    parts = v.split('.')
+                    # Pad parts to ensure consistent sorting
+                    return [int(p) for p in parts] + [0] * (3 - len(parts))
+                except:
+                    return [0, 0, 0]
+
+            available_versions = sorted(game_versions, key=version_key, reverse=True)
+
+            # Filter loaders to supported ones
+            available_loaders = [l for l in loaders if l in ["fabric", "forge", "quilt", "neoforge"]]
+
+            print(f"Mod {mod_data['title']}: {len(available_versions)} versions, {len(available_loaders)} loaders")
+
+            self.show_install_dialog(mod_data, available_versions, available_loaders)
+
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to fetch mod versions: {str(e)}")
+
+    def show_install_dialog(self, mod_data, available_versions, available_loaders):
+        """Show the installation dialog with actual available options"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"Install {mod_data['title']}")
+        dialog.resize(350, 200)
+
+        layout = QVBoxLayout(dialog)
+
+        # Mod info
+        info_label = QLabel(f"<b>{mod_data['title']}</b><br>"
+                           f"Author: {mod_data.get('author', 'Unknown')}<br>"
+                           f"Downloads: {mod_data.get('downloads', 0):,}")
+        info_label.setWordWrap(True)
+        layout.addWidget(info_label)
+
+        layout.addWidget(QLabel(""))  # Spacer
+
+        # MC Version selection
+        layout.addWidget(QLabel("Minecraft Version:"))
+        self.mc_combo = QComboBox()
+        self.mc_combo.addItems(available_versions)
+        if available_versions:
+            self.mc_combo.setCurrentIndex(0)
+        layout.addWidget(self.mc_combo)
+
+        # Loader selection
+        layout.addWidget(QLabel("Mod Loader:"))
+        self.loader_combo = QComboBox()
+        self.loader_combo.addItems(available_loaders)
+        if available_loaders:
+            self.loader_combo.setCurrentIndex(0)
+        layout.addWidget(self.loader_combo)
+
+        # Compatibility info
+        compat_label = QLabel(f"<i>Available versions: {', '.join(available_versions[:5])}{'...' if len(available_versions) > 5 else ''}</i>")
+        compat_label.setWordWrap(True)
+        compat_label.setStyleSheet("font-size: 10px; color: #666;")
+        layout.addWidget(compat_label)
+
+        layout.addWidget(QLabel(""))  # Spacer
+
+        # Buttons
+        buttons_layout = QHBoxLayout()
+        install_btn = QPushButton("Install")
+        install_btn.clicked.connect(lambda: self.start_install(dialog, mod_data))
+        buttons_layout.addWidget(install_btn)
+
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(dialog.reject)
+        buttons_layout.addWidget(cancel_btn)
+
+        layout.addLayout(buttons_layout)
+
+        dialog.exec()
+
+    def start_install(self, dialog, mod_data):
+        """Start the installation process"""
+        mc_version = self.mc_combo.currentText()
+        loader = self.loader_combo.currentText()
+        dialog.accept()
+
+        # Show progress
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.status_label.setText(f"Installing {mod_data['title']}...")
+
+        # Start install thread
+        self.install_thread = ModInstallThread(mod_data, mc_version, loader)
+        self.install_thread.progress.connect(self.progress_bar.setValue)
+        self.install_thread.finished.connect(self.on_install_finished)
+        self.install_thread.error_occurred.connect(self.on_install_error)
+        self.install_thread.start()
+
+    def on_install_finished(self, message):
+        """Handle successful installation"""
+        self.progress_bar.setVisible(False)
+        self.status_label.setText(message)
+        QMessageBox.information(self, "Success", message)
+
+    def on_install_error(self, error_msg):
+        """Handle installation error"""
+        self.progress_bar.setVisible(False)
+        self.status_label.setText(f"Installation failed")
+        QMessageBox.critical(self, "Installation Error", error_msg)
+
+
+def open_mod_download_dialog(parent):
+    """Open the mod download dialog"""
+    dialog = ModDownloadDialog(parent)
+    dialog.exec()
+
+
 if __name__ == "__main__":
     import sys
     app = QApplication(sys.argv)
@@ -928,6 +1471,9 @@ if __name__ == "__main__":
 
     # Connect mods folder button
     ui.modsButton.clicked.connect(open_mods_folder)
+
+    # Connect download mods button
+    ui.downloadModsButton.clicked.connect(lambda: open_mod_download_dialog(MainWindow))
 
     # Connect delete version button
     ui.deleteButton.clicked.connect(lambda: delete_version(ui))

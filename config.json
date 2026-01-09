@@ -1,12 +1,12 @@
 {
     "ram": {
         "min": "1024M",
-        "max": "2G"
+        "max": "7G"
     },
-    "show_forge": false,
+    "show_forge": true,
     "show_fabric": false,
     "show_snapshots": false,
-    "last_version": "",
-    "last_username": "",
+    "last_version": "forge-1.16.5",
+    "last_username": "IlyaPablo",
     "background_path": "saturn-background.png"
 }
