@@ -6,6 +6,7 @@ import os
 import json
 import psutil
 import requests
+import shlex
 from rich import print
 from rich.console import Console
 from rich.text import Text
@@ -73,6 +74,11 @@ try:
     mods_dir = "saturn_launcher/mods"
     if not os.path.exists(mods_dir):
         os.makedirs(mods_dir)
+
+# shaders directory
+    shaders_dir = "saturn_launcher/shaderpacks"
+    if not os.path.exists(shaders_dir):
+        os.makedirs(shaders_dir)
 
 # Shell Commands
     saturn_help = "saturn --help"
@@ -397,16 +403,20 @@ try:
             print("\nafter 'saturn --start' type 'x.x.x' version to install/launch release stable version")
             print("\nif you need forge/fabric version type 'forge-x.x.x' or 'fabric-x.x.x'")
             print("\nMod commands:")
-            print("'saturn --mods search <name>' search for mods on Modrinth")
+            print("'saturn --mods search <name>' search for mods and shaders on Modrinth")
             print("'saturn --mods install <name> <mc_version> <loader>' install mod")
             print("'saturn --mods list' list installed mods")
             print("'saturn --mods remove <name>' remove mod")
+            print("\nShader commands:")
+            print("'saturn --shaders install <name> <mc_version>' install shader")
+            print("'saturn --shaders list' list installed shaders")
+            print("'saturn --shaders remove <name>' remove shader")
 
         # ================================
         # MODS MANAGEMENT
         # ================================
         elif shell_commands.startswith("saturn --mods"):
-            parts = shell_commands.split()
+            parts = shlex.split(shell_commands)
             if len(parts) < 3:
                 print("[red]Invalid mod command. Use 'saturn --mods search/install/list/remove'[/red]")
                 continue
@@ -419,7 +429,6 @@ try:
                     continue
                 mod_name = " ".join(parts[3:])
                 try:
-                    # Search Modrinth API
                     url = f"https://api.modrinth.com/v2/search?query={mod_name}&limit=10"
                     response = requests.get(url)
                     response.raise_for_status()
@@ -431,16 +440,16 @@ try:
 
                     table = Table(title=f"Search results for '{mod_name}'")
                     table.add_column("Name", style="cyan", no_wrap=True)
+                    table.add_column("Type", style="blue")
                     table.add_column("Description", style="white")
                     table.add_column("Downloads", style="green")
-                    table.add_column("Categories", style="magenta")
 
                     for hit in data["hits"]:
                         name = hit.get("title", "Unknown")
+                        project_type = hit.get("project_type", "mod").capitalize()
                         desc = hit.get("description", "No description")[:50] + "..." if len(hit.get("description", "")) > 50 else hit.get("description", "No description")
                         downloads = f"{hit.get('downloads', 0):,}"
-                        categories = ", ".join(hit.get("categories", []))
-                        table.add_row(name, desc, downloads, categories)
+                        table.add_row(name, project_type, desc, downloads)
 
                     console.print(table)
                 except Exception as e:
@@ -455,7 +464,6 @@ try:
                 loader = parts[-1]
 
                 try:
-                    # Search for the mod
                     url = f"https://api.modrinth.com/v2/search?query={mod_name}&limit=5"
                     response = requests.get(url)
                     response.raise_for_status()
@@ -465,12 +473,10 @@ try:
                         print(f"[red]No mod found for '{mod_name}'[/red]")
                         continue
 
-                    # Take the first result
                     project = data["hits"][0]
                     project_id = project["project_id"]
                     mod_title = project["title"]
 
-                    # Get versions
                     version_url = f"https://api.modrinth.com/v2/project/{project_id}/version?game_versions=[\"{mc_version}\"]&loaders=[\"{loader}\"]"
                     version_response = requests.get(version_url)
                     version_response.raise_for_status()
@@ -480,13 +486,11 @@ try:
                         print(f"[red]No compatible version found for {mod_title} on MC {mc_version} with {loader}[/red]")
                         continue
 
-                    # Take the latest version
                     version_data = versions[0]
                     primary_file = version_data["files"][0]
                     download_url = primary_file["url"]
                     filename = primary_file["filename"]
 
-                    # Download
                     print(f"[cyan]Downloading {mod_title} ({filename})...[/cyan]")
                     with requests.get(download_url, stream=True) as r:
                         r.raise_for_status()
@@ -538,6 +542,104 @@ try:
 
             else:
                 print("[red]Unknown mod subcommand. Use search, install, list, or remove[/red]")
+
+        # ================================
+        # SHADERS MANAGEMENT
+        # ================================
+        elif shell_commands.startswith("saturn --shaders"):
+            parts = shlex.split(shell_commands)
+            if len(parts) < 3:
+                print("[red]Invalid shader command. Use 'saturn --shaders install/list/remove'[/red]")
+                continue
+
+            subcommand = parts[2]
+
+            if subcommand == "install":
+                if len(parts) < 5:
+                    print("[red]Usage: saturn --shaders install <shader_name> <mc_version>[/red]")
+                    continue
+                shader_name = " ".join(parts[3:-1])
+                mc_version = parts[-1]
+
+                try:
+                    url = f"https://api.modrinth.com/v2/search?query={shader_name}&limit=5&facets=[[\"project_type:shader\"]]"
+                    response = requests.get(url)
+                    response.raise_for_status()
+                    data = response.json()
+
+                    if not data.get("hits"):
+                        print(f"[red]No shader found for '{shader_name}'[/red]")
+                        continue
+
+                    project = data["hits"][0]
+                    project_id = project["project_id"]
+                    shader_title = project["title"]
+
+                    version_url = f"https://api.modrinth.com/v2/project/{project_id}/version?game_versions=[\"{mc_version}\"]"
+                    version_response = requests.get(version_url)
+                    version_response.raise_for_status()
+                    versions = version_response.json()
+
+                    if not versions:
+                        print(f"[red]No compatible version found for {shader_title} on MC {mc_version}[/red]")
+                        continue
+
+                    version_data = versions[0]
+                    primary_file = version_data["files"][0]
+                    download_url = primary_file["url"]
+                    filename = primary_file["filename"]
+
+                    print(f"[cyan]Downloading {shader_title} ({filename})...[/cyan]")
+                    with requests.get(download_url, stream=True) as r:
+                        r.raise_for_status()
+                        total_size = int(r.headers.get('content-length', 0))
+                        with open(os.path.join(shaders_dir, filename), 'wb') as f:
+                            with Progress(
+                                BarColumn(),
+                                TextColumn("[progress.description]{task.description}"),
+                                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                                transient=True,
+                            ) as progress:
+                                task = progress.add_task(f"Downloading {filename}", total=total_size)
+                                downloaded = 0
+                                for chunk in r.iter_content(chunk_size=8192):
+                                    f.write(chunk)
+                                    downloaded += len(chunk)
+                                    progress.update(task, completed=downloaded)
+
+                    print(f"[green]Installed {shader_title} successfully![/green]")
+                except Exception as e:
+                    print(f"[red]Error installing shader: {e}[/red]")
+
+            elif subcommand == "list":
+                shaders = os.listdir(shaders_dir)
+                if not shaders:
+                    print("[yellow]No shaders installed[/yellow]")
+                else:
+                    print("[cyan]Installed shaders:[/cyan]")
+                    for shader in sorted(shaders):
+                        print(f"[magenta]{shader}[/magenta]")
+
+            elif subcommand == "remove":
+                if len(parts) < 4:
+                    print("[red]Usage: saturn --shaders remove <shader_name>[/red]")
+                    continue
+                shader_name = " ".join(parts[3:])
+
+                shaders = os.listdir(shaders_dir)
+                removed = False
+                for shader in shaders:
+                    if shader_name.lower() in shader.lower():
+                        os.remove(os.path.join(shaders_dir, shader))
+                        print(f"[green]Removed {shader}[/green]")
+                        removed = True
+                        break
+
+                if not removed:
+                    print(f"[red]Shader '{shader_name}' not found[/red]")
+
+            else:
+                print("[red]Unknown shader subcommand. Use install, list, or remove[/red]")
 
         else:
             print("[red]ERROR: Unknown command[/red]")
