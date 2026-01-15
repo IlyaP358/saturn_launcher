@@ -7,6 +7,13 @@ hiddenimports = []
 tmp_ret = collect_all('pyfiglet')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
+# Add PNG resources
+datas += [
+    ('logo.png', '.'),
+    ('saturn-background.png', '.'),
+    ('saturn_title.png', '.'),
+]
+
 
 a = Analysis(
     ['saturn.py'],

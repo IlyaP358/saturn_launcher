@@ -1,10 +1,21 @@
 from rich.console import Console
 from PIL import Image
+import sys
+import os
 
 console = Console()
 
 def get_logo_lines():
-    img = Image.open("logo.png").resize((40, 20)).convert("RGBA")
+    # Get the correct path for logo.png (works for both bundled and unbundled)
+    if getattr(sys, 'frozen', False):
+        # Running as compiled executable
+        base_path = sys._MEIPASS
+    else:
+        # Running as script
+        base_path = os.path.dirname(os.path.abspath(__file__))
+    
+    logo_path = os.path.join(base_path, "logo.png")
+    img = Image.open(logo_path).resize((40, 20)).convert("RGBA")
     lines = []
     for y in range(img.height):
         line = ""
