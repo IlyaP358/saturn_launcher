@@ -1,4 +1,3 @@
-import minecraft_launcher_lib
 import subprocess
 import uuid
 import json
@@ -8,6 +7,9 @@ import psutil
 import shutil
 import requests
 from io import BytesIO
+
+# Heavy libraries - will be imported lazily when needed:
+# - minecraft_launcher_lib (imported in get_versions, LaunchThread)
 
 def get_resource_path(filename):
     if getattr(sys, 'frozen', False):
@@ -116,6 +118,15 @@ class Ui_MainWindow(object):
         self.downloadModsButton.setIcon(download_icon)
         self.buttonsLayout.addWidget(self.downloadModsButton)
 
+        self.downloadShadersButton = QPushButton(self.inputFrame)
+        self.downloadShadersButton.setObjectName(u"downloadShadersButton")
+        self.downloadShadersButton.setText("Download Shaders")
+        self.downloadShadersButton.setFixedWidth(140)  # Slightly wider for text
+        # Add shader/graphics icon
+        shader_icon = MainWindow.style().standardIcon(QStyle.SP_FileDialogDetailedView)
+        self.downloadShadersButton.setIcon(shader_icon)
+        self.buttonsLayout.addWidget(self.downloadShadersButton)
+
         self.deleteButton = QPushButton(self.inputFrame)
         self.deleteButton.setObjectName(u"deleteButton")
         self.deleteButton.setText("Delete Version")
@@ -135,16 +146,16 @@ class Ui_MainWindow(object):
         config = load_config()
         bg_file = config.get("background_path", "saturn-background.png")
 
-        # Проверяем существует ли файл
-        if os.path.exists(bg_file):
-            # Уже полный путь (пользовательский фон)
+        # Determine the correct background path
+        if os.path.exists(bg_file) and os.path.isabs(bg_file):
+            # User-selected custom background (absolute path that exists)
             background_path = bg_file
-        elif os.path.isabs(bg_file):
-            # Абсолютный путь но не существует, используем дефолт
-            background_path = get_resource_path("saturn-background.png")
         else:
-            # Относительный путь, ищем в ресурсах
-            background_path = get_resource_path(bg_file)
+            # Use default bundled background
+            background_path = get_resource_path("saturn-background.png")
+
+        # Convert Windows backslashes to forward slashes for CSS compatibility
+        background_path = background_path.replace('\\', '/')
 
         # Set background image and frame styling
         self.centralwidget.setStyleSheet(f"""
@@ -184,13 +195,17 @@ class Ui_MainWindow(object):
         self.statusbar.setObjectName(u"statusbar")
         MainWindow.setStatusBar(self.statusbar)
 
+        # Set window icon
+        icon_path = get_resource_path("logo.png")
+        MainWindow.setWindowIcon(QIcon(icon_path))
+
         self.retranslateUi(MainWindow)
 
         QMetaObject.connectSlotsByName(MainWindow)
     # setupUi
 
     def retranslateUi(self, MainWindow):
-        MainWindow.setWindowTitle(QCoreApplication.translate("MainWindow", u"MainWindow", None))
+        MainWindow.setWindowTitle(QCoreApplication.translate("MainWindow", u"Saturn Launcher", None))
         self.lineEdit.setPlaceholderText(QCoreApplication.translate("MainWindow", u"Username...", None))
         self.pushButton.setText(QCoreApplication.translate("MainWindow", u"Start Game", None))
         self.label.setText(QCoreApplication.translate("MainWindow", u"Saturn Launcher", None))
@@ -222,6 +237,7 @@ class LaunchThread(QThread):
             print(f"Error in progress callback: {e}")
 
     def run(self):
+        import minecraft_launcher_lib  # Lazy import
         try:
             print(f"Starting launch process for version: {self.version}, username: {self.username}")
 
@@ -421,6 +437,7 @@ def save_config(config):
 
 def is_version_installed(version):
     """Check if a version is installed"""
+    import minecraft_launcher_lib  # Lazy import
     try:
         minecraft_directory = os.path.abspath("saturn_launcher")
 
@@ -455,6 +472,7 @@ def is_version_installed(version):
 
 
 def get_versions(show_forge=False, show_fabric=False, show_snapshots=False):
+    import minecraft_launcher_lib  # Lazy import
     try:
         versions_data = minecraft_launcher_lib.utils.get_version_list()
         versions = []
@@ -885,10 +903,13 @@ def change_background(config, bg_button, MainWindow, ui):
                 bg_button.setText(f"Background: {filename}")
                 bg_button.setToolTip(f"Current background: {filename}\nClick to change")
 
+                # Convert Windows backslashes to forward slashes for CSS
+                css_path = dest_path.replace('\\', '/')
+
                 # Применяем фон немедленно
                 ui.centralwidget.setStyleSheet(f"""
                     #centralwidget {{
-                        background-image: url({dest_path});
+                        background-image: url({css_path});
                         background-repeat: no-repeat;
                         background-position: center;
                     }}
@@ -1474,7 +1495,11 @@ if __name__ == "__main__":
 
     # Connect download mods button
     ui.downloadModsButton.clicked.connect(lambda: open_mod_download_dialog(MainWindow))
-
+    
+    # Import shader download functionality
+    from shader_download_classes import open_shader_download_dialog
+    ui.downloadShadersButton.clicked.connect(lambda: open_shader_download_dialog(MainWindow))
+    
     # Connect delete version button
     ui.deleteButton.clicked.connect(lambda: delete_version(ui))
 
