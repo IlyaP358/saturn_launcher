@@ -1,7 +1,16 @@
 # -*- mode: python ; coding: utf-8 -*-
+import os
 from PyInstaller.utils.hooks import collect_all
 
-datas = []
+spec_dir = os.path.dirname(os.path.abspath(SPEC))
+
+datas = [
+    (os.path.join(spec_dir, 'logo.png'), '.'),
+    (os.path.join(spec_dir, 'config.json'), '.'),
+    (os.path.join(spec_dir, '.env'), '.'),
+    (os.path.join(spec_dir, 'version.txt'), '.'),
+    (os.path.join(spec_dir, 'saturn_updater.py'), '.'),
+]
 binaries = []
 hiddenimports = []
 tmp_ret = collect_all('pyfiglet')
@@ -9,7 +18,6 @@ datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
 # Add PNG resources
 datas += [
-    ('logo.png', '.'),
     ('saturn-background.png', '.'),
     ('saturn_title.png', '.'),
 ]

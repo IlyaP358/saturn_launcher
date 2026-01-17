@@ -3,16 +3,21 @@ import subprocess
 import uuid
 import pyfiglet
 import os
+import sys
 import json
 import psutil
 import requests
 import shlex
+from dotenv import load_dotenv
 from rich import print
 from rich.console import Console
 from rich.text import Text
 from rich.progress import Progress, SpinnerColumn, TextColumn, track, BarColumn
 from rich.table import Table
 from image_ascii import get_logo_lines
+
+# Load environment variables from .env file
+load_dotenv()
 
 #remember commands history
 try:
@@ -64,6 +69,229 @@ try:
         print(f"[red]Error fetching versions: {e}[/red]")
         exit()
 
+except Exception as e:
+    print(f"[red]Fatal error during initialization: {e}[/red]")
+    exit()
+
+# ================================
+# UPDATE SYSTEM FUNCTIONS
+# ================================
+
+def get_current_version():
+    """Get current version from version.txt"""
+    try:
+        # Check if running as compiled executable
+        if getattr(sys, 'frozen', False):
+            base_path = sys._MEIPASS
+        else:
+            base_path = os.path.dirname(os.path.abspath(__file__))
+        
+        version_file = os.path.join(base_path, 'version.txt')
+        
+        with open(version_file, 'r') as f:
+            return f.read().strip()
+    except:
+        return "unknown"
+
+
+def get_latest_release():
+    """Get latest release info from GitHub"""
+    try:
+        github_token = os.getenv('GITHUB_TOKEN')
+        github_repo = os.getenv('GITHUB_REPO', 'IlyaP358/saturn-versions-rep')
+        
+        if not github_token:
+            print("[red]Error: GitHub token not found in .env file[/red]")
+            return None
+        
+        headers = {
+            'Authorization': f'token {github_token}',
+            'Accept': 'application/vnd.github.v3+json'
+        }
+        
+        url = f'https://api.github.com/repos/{github_repo}/releases/latest'
+        response = requests.get(url, headers=headers, timeout=10)
+        
+        if response.status_code == 404:
+            print("[yellow]No releases found in repository[/yellow]")
+            return None
+        
+        response.raise_for_status()
+        return response.json()
+        
+    except requests.exceptions.RequestException as e:
+        print(f"[red]Error connecting to GitHub: {e}[/red]")
+        return None
+    except Exception as e:
+        print(f"[red]Error: {e}[/red]")
+        return None
+
+
+def compare_versions(current, latest):
+    """Compare version strings (e.g., '0.1.0' vs '0.2.0')"""
+    try:
+        current_parts = [int(x) for x in current.split('.')]
+        latest_parts = [int(x) for x in latest.split('.')]
+        
+        # Pad with zeros if needed
+        while len(current_parts) < 3:
+            current_parts.append(0)
+        while len(latest_parts) < 3:
+            latest_parts.append(0)
+        
+        return latest_parts > current_parts
+    except:
+        return False
+
+
+def download_update(download_url, filename):
+    """Download update file with progress bar"""
+    try:
+        print(f"[cyan]Downloading {filename}...[/cyan]")
+        
+        github_token = os.getenv('GITHUB_TOKEN')
+        headers = {
+            'Authorization': f'token {github_token}',
+            'Accept': 'application/octet-stream'
+        }
+        
+        response = requests.get(download_url, headers=headers, stream=True, timeout=30)
+        response.raise_for_status()
+        
+        total_size = int(response.headers.get('content-length', 0))
+        
+        # Create temp directory
+        temp_dir = os.path.join(os.getcwd(), '.saturn_temp')
+        if not os.path.exists(temp_dir):
+            os.makedirs(temp_dir)
+        
+        filepath = os.path.join(temp_dir, filename)
+        
+        with open(filepath, 'wb') as f:
+            with Progress(
+                BarColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                transient=True,
+            ) as progress:
+                task = progress.add_task(f"Downloading", total=total_size)
+                downloaded = 0
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    progress.update(task, completed=downloaded)
+        
+        print(f"[green]✓ Download complete![/green]")
+        return filepath
+        
+    except Exception as e:
+        print(f"[red]Download failed: {e}[/red]")
+        return None
+
+
+def check_for_updates():
+    """Check for updates and install if available"""
+    print("[cyan]Checking for updates...[/cyan]\n")
+    
+    # Get current version
+    current_version = get_current_version()
+    print(f"Current version: [yellow]{current_version}[/yellow]")
+    
+    # Get latest release
+    release = get_latest_release()
+    if not release:
+        return
+    
+    latest_version = release['tag_name'].lstrip('v')
+    print(f"Latest version:  [yellow]{latest_version}[/yellow]\n")
+    
+    # Compare versions
+    if not compare_versions(current_version, latest_version):
+        print("[green]✓ You are running the latest version![/green]")
+        return
+    
+    print("[green]New version available![/green]\n")
+    
+    # Show release notes if available
+    if release.get('body'):
+        print("[cyan]Changelog:[/cyan]")
+        print(release['body'][:300])  # Show first 300 chars
+        if len(release['body']) > 300:
+            print("...")
+        print()
+    
+    # Ask user to confirm
+    response = input("Download and install update? (y/n): ").strip().lower()
+    if response != 'y':
+        print("[yellow]Update cancelled[/yellow]")
+        return
+    
+    # Determine platform and find appropriate asset
+    import platform
+    system = platform.system()
+    
+    if system == "Windows":
+        asset_name = "saturn_windows.exe"
+    elif system == "Linux":
+        asset_name = "saturn_linux"
+    else:
+        print(f"[red]Unsupported platform: {system}[/red]")
+        return
+    
+    # Find asset in release
+    asset = None
+    for a in release.get('assets', []):
+        if a['name'] == asset_name:
+            asset = a
+            break
+    
+    if not asset:
+        print(f"[red]Asset '{asset_name}' not found in release[/red]")
+        return
+    
+    # Download update
+    new_exe_path = download_update(asset['url'], asset_name)
+    if not new_exe_path:
+        return
+    
+    # Get current executable path
+    if getattr(sys, 'frozen', False):
+        current_exe = sys.executable
+    else:
+        print("[yellow]Warning: Running from source, cannot auto-update[/yellow]")
+        print(f"Downloaded file: {new_exe_path}")
+        return
+    
+    # Launch updater script
+    print("\n[cyan]Launching updater...[/cyan]")
+    
+    # Get updater script path
+    if getattr(sys, 'frozen', False):
+        updater_path = os.path.join(sys._MEIPASS, 'saturn_updater.py')
+    else:
+        updater_path = os.path.join(os.path.dirname(__file__), 'saturn_updater.py')
+    
+    # Extract updater if bundled
+    if getattr(sys, 'frozen', False):
+        temp_updater = os.path.join(os.getcwd(), '.saturn_temp', 'saturn_updater.py')
+        import shutil
+        shutil.copy2(updater_path, temp_updater)
+        updater_path = temp_updater
+    
+    # Launch updater
+    try:
+        subprocess.Popen([sys.executable, updater_path, current_exe, new_exe_path])
+        print("[green]✓ Updater launched! Exiting...[/green]")
+        sys.exit(0)
+    except Exception as e:
+        print(f"[red]Failed to launch updater: {e}[/red]")
+
+
+# ================================
+# MAIN PROGRAM
+# ================================
+
+try:
 #installed version
     if not os.path.exists("saturn_launcher/versions"):
         os.makedirs("saturn_launcher/versions")
@@ -91,6 +319,7 @@ try:
     saturn_ram_auto = "saturn --ram auto"
     start_launcher = "saturn --start"
     saturn_installed = "saturn --installed"
+    saturn_update = "saturn --update"
     exit_command = "exit"
 
 # MAIN LOOP
@@ -377,6 +606,12 @@ try:
                 print(f"[red]Error launching game: {e}[/red]")
 
         # ================================
+        # UPDATE COMMAND
+        # ================================
+        elif shell_commands == saturn_update:
+            check_for_updates()
+
+        # ================================
         # EXIT
         # ================================
         elif shell_commands == exit_command:
@@ -398,6 +633,7 @@ try:
             print("'saturn --ram auto' to automatically set best amount RAM to your system")
             print("'saturn --start' initialize and start the Minecraft")
             print("'saturn --installed' to display all installed versions")
+            print("'saturn --update' to update the launcher")
             print("\ntype 'exit' to exit launcher")
 
             print("\nafter 'saturn --start' type 'x.x.x' version to install/launch release stable version")
@@ -411,6 +647,7 @@ try:
             print("'saturn --shaders install <name> <mc_version>' install shader")
             print("'saturn --shaders list' list installed shaders")
             print("'saturn --shaders remove <name>' remove shader")
+            
 
         # ================================
         # MODS MANAGEMENT

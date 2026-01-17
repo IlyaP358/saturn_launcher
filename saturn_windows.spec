@@ -1,7 +1,16 @@
 # -*- mode: python ; coding: utf-8 -*-
+import os
 from PyInstaller.utils.hooks import collect_all
 
-datas = []
+spec_dir = os.path.dirname(os.path.abspath(SPEC))
+
+datas = [
+    (os.path.join(spec_dir, 'logo.png'), '.'),
+    (os.path.join(spec_dir, 'config.json'), '.'),
+    (os.path.join(spec_dir, '.env'), '.'),
+    (os.path.join(spec_dir, 'version.txt'), '.'),
+    (os.path.join(spec_dir, 'saturn_updater.py'), '.'),
+]
 binaries = []
 hiddenimports = []
 tmp_ret = collect_all('pyfiglet')
