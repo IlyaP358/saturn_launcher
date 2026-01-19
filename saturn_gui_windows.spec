@@ -11,6 +11,7 @@ datas = [
     (os.path.join(spec_dir, 'logo.png'), '.'),
     (os.path.join(spec_dir, 'logo.ico'), '.'),
     (os.path.join(spec_dir, 'config.json'), '.'),
+    (os.path.join(spec_dir, 'version.txt'), '.'),
 ]
 
 binaries = []
@@ -21,6 +22,7 @@ hiddenimports = [
     'PySide6.QtWidgets',
     # Shader download module
     'shader_download_classes',
+    'update_gui_classes',
 ]
 
 # Collect pyfiglet data

@@ -686,6 +686,24 @@ def open_settings(parent, ui):
     cancel_button.clicked.connect(dialog.reject)
     button_layout.addWidget(cancel_button)
 
+    layout.addWidget(QLabel(""))  # Spacer
+
+    # Update Section
+    layout.addWidget(QLabel("Updates:"))
+    update_layout = QHBoxLayout()
+    
+    from update_gui_classes import get_current_version, UpdateDialog
+    version_label = QLabel(f"Current Version: {get_current_version()}")
+    update_layout.addWidget(version_label)
+    
+    check_update_btn = QPushButton("Check for Updates")
+    check_update_btn.clicked.connect(lambda: UpdateDialog(dialog).exec())
+    update_layout.addWidget(check_update_btn)
+    
+    layout.addLayout(update_layout)
+
+    layout.addWidget(QLabel(""))  # Spacer
+
     layout.addLayout(button_layout)
 
     dialog.setLayout(layout)
@@ -1498,6 +1516,7 @@ if __name__ == "__main__":
     
     # Import shader download functionality
     from shader_download_classes import open_shader_download_dialog
+    from update_gui_classes import UpdateDialog
     ui.downloadShadersButton.clicked.connect(lambda: open_shader_download_dialog(MainWindow))
     
     # Connect delete version button
