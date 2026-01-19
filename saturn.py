@@ -8,16 +8,12 @@ import json
 import psutil
 import requests
 import shlex
-from dotenv import load_dotenv
 from rich import print
 from rich.console import Console
 from rich.text import Text
 from rich.progress import Progress, SpinnerColumn, TextColumn, track, BarColumn
 from rich.table import Table
 from image_ascii import get_logo_lines
-
-# Load environment variables from .env file
-load_dotenv()
 
 #remember commands history
 try:
@@ -95,17 +91,12 @@ def get_current_version():
 
 
 def get_latest_release():
-    """Get latest release info from GitHub"""
+    """Get latest release info from GitHub (Public Repo)"""
     try:
-        github_token = os.getenv('GITHUB_TOKEN')
-        github_repo = os.getenv('GITHUB_REPO', 'IlyaP358/saturn-versions-rep')
-        
-        if not github_token:
-            print("[red]Error: GitHub token not found in .env file[/red]")
-            return None
+        # Public repository URL
+        github_repo = 'IlyaP358/saturn-versions-rep'
         
         headers = {
-            'Authorization': f'token {github_token}',
             'Accept': 'application/vnd.github.v3+json'
         }
         
@@ -149,9 +140,7 @@ def download_update(download_url, filename):
     try:
         print(f"[cyan]Downloading {filename}...[/cyan]")
         
-        github_token = os.getenv('GITHUB_TOKEN')
         headers = {
-            'Authorization': f'token {github_token}',
             'Accept': 'application/octet-stream'
         }
         
@@ -223,7 +212,7 @@ def check_for_updates():
     # Ask user to confirm
     response = input("Download and install update? (y/n): ").strip().lower()
     if response != 'y':
-        print("[yellow]Update cancelled[/yellow]")
+        print("[red]Update cancelled[/red]")
         return
     
     # Determine platform and find appropriate asset
@@ -265,24 +254,39 @@ def check_for_updates():
     # Launch updater script
     print("\n[cyan]Launching updater...[/cyan]")
     
-    # Get updater script path
-    if getattr(sys, 'frozen', False):
-        updater_path = os.path.join(sys._MEIPASS, 'saturn_updater.py')
-    else:
-        updater_path = os.path.join(os.path.dirname(__file__), 'saturn_updater.py')
-    
-    # Extract updater if bundled
-    if getattr(sys, 'frozen', False):
-        temp_updater = os.path.join(os.getcwd(), '.saturn_temp', 'saturn_updater.py')
-        import shutil
-        shutil.copy2(updater_path, temp_updater)
-        updater_path = temp_updater
-    
-    # Launch updater
     try:
-        subprocess.Popen([sys.executable, updater_path, current_exe, new_exe_path])
+        if system == "Windows":
+            updater_script = os.path.join(os.getcwd(), 'saturn_updater.bat')
+            with open(updater_script, 'w') as f:
+                f.write(f'''@echo off
+timeout /t 2 /nobreak >nul
+del "{current_exe}"
+move "{new_exe_path}" "{current_exe}"
+start "" "{current_exe}"
+del "%~f0"
+''')
+            subprocess.Popen([updater_script], shell=True)
+            
+        elif system == "Linux":
+            updater_script = os.path.join(os.getcwd(), 'saturn_updater.sh')
+            with open(updater_script, 'w') as f:
+                f.write(f'''#!/bin/bash
+sleep 2
+mv "{new_exe_path}" "{current_exe}"
+chmod +x "{current_exe}"
+# Clear PyInstaller environment variables
+export LD_LIBRARY_PATH=""
+# Launch new version detached
+(setsid "{current_exe}" &) >/dev/null 2>&1
+rm "$0"
+''')
+            os.chmod(updater_script, 0o755)
+            # Use subprocess to launch script detached
+            subprocess.Popen(['/bin/bash', updater_script], start_new_session=True)
+            
         print("[green]✓ Updater launched! Exiting...[/green]")
         sys.exit(0)
+        
     except Exception as e:
         print(f"[red]Failed to launch updater: {e}[/red]")
 
