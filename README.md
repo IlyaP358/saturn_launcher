@@ -48,6 +48,55 @@ Pre-compiled versions are available in the `saturn-builds` directory.
 ### 🍎 macOS
 *Support for macOS is currently in planning stages.*
 
+### 🐧 Linux (Flatpak)
+
+Flatpak packages are available for easy installation on Linux distributions.
+
+#### Prerequisites
+- Flatpak installed on your system
+- Flathub repository added (usually included by default)
+
+#### Installation
+
+**From Flathub** (when published):
+```bash
+# CLI version
+flatpak install flathub com.github.IlyaP358.SaturnLauncher
+
+# GUI version
+flatpak install flathub com.github.IlyaP358.SaturnLauncher.GUI
+```
+
+**From local bundle** (for testing or manual distribution):
+```bash
+# Build the packages
+./build-flatpak.sh
+
+# Install the bundles
+flatpak install SaturnLauncher.flatpak
+flatpak install SaturnLauncher.GUI.flatpak
+```
+
+#### Usage
+
+After installation, you can run the launchers:
+
+**CLI Version:**
+```bash
+saturn
+# or
+flatpak run com.github.IlyaP358.SaturnLauncher
+```
+
+**GUI Version:**
+```bash
+saturn-gui
+# or
+flatpak run com.github.IlyaP358.SaturnLauncher.GUI
+```
+
+The applications will also appear in your desktop environment's application menu.
+
 ## 🛠️ Development
 
 If you want to modify the source code or run the latest version from the repository, follow these steps.
@@ -85,3 +134,52 @@ pyinstaller saturn_windows.spec  # For Windows
 # or
 pyinstaller saturn_linux.spec    # For Linux
 ```
+
+### Flatpak Packaging
+
+To build Flatpak packages for Linux distribution:
+
+#### Prerequisites
+- `flatpak` and `flatpak-builder` installed
+- `org.freedesktop.Platform` and `org.freedesktop.Sdk` runtime installed
+
+#### Building
+```bash
+# Make build script executable
+chmod +x build-flatpak.sh
+
+# Build both CLI and GUI versions
+./build-flatpak.sh
+```
+
+This will create `SaturnLauncher.flatpak` and `SaturnLauncher.GUI.flatpak` bundles.
+
+#### Publishing to Flathub
+
+1. **Fork and clone the Flathub repository:**
+   ```bash
+   git clone https://github.com/flathub/flathub.git
+   cd flathub
+   ```
+
+2. **Create a new directory for your application:**
+   ```bash
+   mkdir -p com.github.IlyaP358.SaturnLauncher
+   cd com.github.IlyaP358.SaturnLauncher
+   ```
+
+3. **Copy the manifest file:**
+   Copy `com.github.IlyaP358.SaturnLauncher.yml` to this directory.
+
+4. **Create metadata files:**
+   - `com.github.IlyaP358.SaturnLauncher.metainfo.xml` (AppStream metadata)
+   - Screenshots and icons as needed
+
+5. **Test the build locally:**
+   ```bash
+   flatpak run org.flatpak.Builder --force-clean --repo=repo build com.github.IlyaP358.SaturnLauncher.yml
+   ```
+
+6. **Submit a pull request** to the Flathub repository with your manifest and metadata.
+
+For the GUI version, repeat the process with `com.github.IlyaP358.SaturnLauncher.GUI.yml`.

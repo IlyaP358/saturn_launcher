@@ -1,0 +1,29 @@
+app-id: com.github.IlyaP358.SaturnLauncher.GUI
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+command: saturn-gui
+finish-args:
+  - --share=network
+  - --share=ipc
+  - --socket=x11
+  - --socket=pulseaudio
+  - --device=dri
+  - --filesystem=xdg-documents
+  - --filesystem=xdg-download
+  - --filesystem=home
+  - --filesystem=~/.icons:ro
+  - --filesystem=~/.local/share/icons:ro
+  - --env=XCURSOR_PATH=/run/host/user-share/icons:/run/host/share/icons
+modules:
+  - name: saturn-launcher-gui
+    buildsystem: simple
+    build-commands:
+      # Install binary
+      - install -D dist/saturn_gui_linux /app/bin/saturn-gui
+      # Install assets (icon/desktop)
+      - install -Dm644 com.github.IlyaP358.SaturnLauncher.GUI.desktop /app/share/applications/com.github.IlyaP358.SaturnLauncher.GUI.desktop
+      - install -Dm644 logo_512.png /app/share/icons/hicolor/512x512/apps/com.github.IlyaP358.SaturnLauncher.GUI.png
+    sources:
+      - type: dir
+        path: .

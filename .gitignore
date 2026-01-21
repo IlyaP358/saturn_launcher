@@ -6,3 +6,4 @@ dist
 __pycache__
 config.json
 .env
+PUBLISHING.md

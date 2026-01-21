@@ -1,0 +1,3 @@
+#!/bin/bash
+export PYTHONPATH=$PYTHONPATH:/app/share/saturn-launcher/src
+exec python3 /app/share/saturn-launcher/src/saturn-gui.py "$@"
