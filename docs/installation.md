@@ -28,7 +28,7 @@ Pre-compiled versions are available in the [Releases](https://github.com/IlyaP35
    ./saturn_linux
    ```
 
-## macOS
+## <img src="https://raw.githubusercontent.com/IlyaP358/saturn-web/main/apple_logo.png" width="16" alt="macOS"> macOS
 
 *Support for macOS is currently in planning stages.*
 
