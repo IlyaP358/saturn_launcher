@@ -1,0 +1,26 @@
+pkgbase = saturn-launcher
+	pkgdesc = Saturn Launcher - Minecraft launcher with shader support
+	pkgver = 1.0.0
+	pkgrel = 1
+	url = https://github.com/IlyaP358/saturn-launcher
+	arch = x86_64
+	arch = aarch64
+	license = custom
+	makedepends = git
+	source = git+https://github.com/IlyaP358/saturn_launcher.git
+	md5sums = SKIP
+
+pkgname = saturn-launcher
+	pkgdesc = Saturn Launcher - Simple CLI Minecraft launcher with Mods / shader support
+	depends = python
+	depends = python-requests
+	depends = python-pyyaml
+	optdepends = java-runtime: for running Minecraft
+
+pkgname = saturn-launcher-gui
+	pkgdesc = Saturn Launcher - Simple GUI Minecraft launcher with Mods / shader support
+	depends = python
+	depends = python-requests
+	depends = python-pyyaml
+	depends = python-pyqt5
+	optdepends = java-runtime: for running Minecraft
