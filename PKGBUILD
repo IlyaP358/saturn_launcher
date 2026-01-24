@@ -8,6 +8,7 @@ url="https://github.com/IlyaP358/saturn_launcher"
 license=('GPL3')
 depends=('python' 'java-runtime' 'python-requests' 'python-pyyaml')
 makedepends=('git' 'python-pip' 'python-wheel')
+install=saturn-launcher.install
 source=("git+https://github.com/IlyaP358/saturn_launcher.git")
 md5sums=('SKIP')
 
