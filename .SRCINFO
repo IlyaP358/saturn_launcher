@@ -1,24 +1,25 @@
 pkgbase = saturn-launcher
-	pkgdesc = Saturn Launcher - Minecraft launcher with shader support
+	pkgdesc = Fast and lightweight Minecraft launcher with shader, mod, and resource pack support
 	pkgver = 1.0.0
 	pkgrel = 1
-	url = https://github.com/IlyaP358/saturn-launcher
-	arch = x86_64
-	arch = aarch64
-	license = custom
+	url = https://github.com/IlyaP358/saturn_launcher
+	arch = any
+	license = GPL3
 	makedepends = git
+	makedepends = python-pip
+	makedepends = python-wheel
 	source = git+https://github.com/IlyaP358/saturn_launcher.git
 	md5sums = SKIP
 
 pkgname = saturn-launcher
-	pkgdesc = Saturn Launcher - Simple CLI Minecraft launcher with Mods / shader support
+	pkgdesc = Console-based Minecraft launcher with support for shaders, mods, and resource packs. Fast, lightweight, and easy to use
 	depends = python
 	depends = python-requests
 	depends = python-pyyaml
 	optdepends = java-runtime: for running Minecraft
 
 pkgname = saturn-launcher-gui
-	pkgdesc = Saturn Launcher - Simple GUI Minecraft launcher with Mods / shader support
+	pkgdesc = User-friendly GUI Minecraft launcher featuring shader, mod, and resource pack management with intuitive interface
 	depends = python
 	depends = python-requests
 	depends = python-pyyaml
