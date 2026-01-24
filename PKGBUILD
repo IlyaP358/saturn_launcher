@@ -41,6 +41,9 @@ package_saturn-launcher() {
   install -d "${pkgdir}/usr/bin"
   cat > "${pkgdir}/usr/bin/saturn" << 'EOF'
 #!/bin/sh
+WORK_DIR="$HOME/.local/share/saturn-launcher"
+mkdir -p "$WORK_DIR"
+cd "$WORK_DIR"
 exec /opt/saturn-launcher/venv/bin/python /opt/saturn-launcher/saturn.py "$@"
 EOF
   chmod +x "${pkgdir}/usr/bin/saturn"
@@ -78,6 +81,9 @@ package_saturn-launcher-gui() {
   install -d "${pkgdir}/usr/bin"
   cat > "${pkgdir}/usr/bin/saturn-gui" << 'EOF'
 #!/bin/sh
+WORK_DIR="$HOME/.local/share/saturn-launcher"
+mkdir -p "$WORK_DIR"
+cd "$WORK_DIR"
 exec /opt/saturn-launcher-gui/venv/bin/python /opt/saturn-launcher-gui/saturn-gui.py "$@"
 EOF
   chmod +x "${pkgdir}/usr/bin/saturn-gui"
