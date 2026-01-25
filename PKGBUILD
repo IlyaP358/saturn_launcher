@@ -1,10 +1,11 @@
+# Maintainer: Illia Pukalov illia.pukalov@teleinformatika.eu
 pkgbase=saturn-launcher
 pkgname=('saturn-launcher' 'saturn-launcher-gui')
 pkgver=1.0.0
 pkgrel=1
 pkgdesc="Fast and lightweight Minecraft launcher with shader, mod, and resource pack support"
 arch=('any')
-url="https://github.com/IlyaP358/saturn_launcher"
+url="https://ilyap358.github.io/saturn-web"
 license=('GPL3')
 depends=('python' 'java-runtime' 'python-requests' 'python-pyyaml')
 makedepends=('git' 'python-pip' 'python-wheel')
