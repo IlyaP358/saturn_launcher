@@ -14,13 +14,13 @@ from rich.text import Text
 from rich.progress import Progress, SpinnerColumn, TextColumn, track, BarColumn
 from rich.table import Table
 from image_ascii import get_logo_lines
+import preset_manager
 
 #remember commands history
 try:
     import readline
 except ImportError:
     import pyreadline3
-
 try:
     console = Console()
 
@@ -89,7 +89,6 @@ def get_current_version():
     except:
         return "unknown"
 
-
 def get_latest_release():
     """Get latest release info from GitHub (Public Repo)"""
     try:
@@ -117,7 +116,6 @@ def get_latest_release():
         print(f"[red]Error: {e}[/red]")
         return None
 
-
 def compare_versions(current, latest):
     """Compare version strings (e.g., '0.1.0' vs '0.2.0')"""
     try:
@@ -133,7 +131,6 @@ def compare_versions(current, latest):
         return latest_parts > current_parts
     except:
         return False
-
 
 def download_update(download_url, filename):
     """Download update file with progress bar"""
@@ -176,7 +173,6 @@ def download_update(download_url, filename):
     except Exception as e:
         print(f"[red]Download failed: {e}[/red]")
         return None
-
 
 def check_for_updates():
     """Check for updates and install if available"""
@@ -290,7 +286,6 @@ rm "$0"
     except Exception as e:
         print(f"[red]Failed to launch updater: {e}[/red]")
 
-
 # ================================
 # MAIN PROGRAM
 # ================================
@@ -311,6 +306,9 @@ try:
     shaders_dir = "saturn_launcher/shaderpacks"
     if not os.path.exists(shaders_dir):
         os.makedirs(shaders_dir)
+
+# presets directory
+    preset_manager.init_presets_directory()
 
 # Shell Commands
     saturn_help = "saturn --help"
@@ -473,7 +471,6 @@ try:
             else:
                 print("[yellow]RAM settings unchanged.[/yellow]")
 
-
         # ================================
         # START LAUNCHER (AUTO VANILLA / FORGE / FABRIC)
         # ================================
@@ -486,7 +483,11 @@ try:
 
             version = input("Enter version (vanilla or forge-1.xx or fabric-1.xx): ").strip()
             username = input("Enter Username: ")
-            minecraft_directory = "saturn_launcher"
+            
+            # Use active preset directory
+            active_preset = preset_manager.get_active_preset()
+            minecraft_directory = preset_manager.get_preset_path(active_preset)
+            print(f"[cyan]Using preset: {active_preset}[/cyan]")
 
             # Auto-install Forge
             if version.startswith("forge-"):
@@ -651,6 +652,13 @@ try:
             print("'saturn --shaders install <name> <mc_version>' install shader")
             print("'saturn --shaders list' list installed shaders")
             print("'saturn --shaders remove <name>' remove shader")
+            
+            print("\nPreset commands:")
+            print("'saturn presets --list' list all presets")
+            print("'saturn presets --switch \"name\"' switch to or create a preset")
+            print("'saturn presets --delete \"name\"' delete a preset")
+            print("'saturn presets --zip \"name\"' compress preset to save space")
+            print("'saturn presets --unzip \"name\"' decompress archived preset")
             
 
         # ================================
@@ -881,6 +889,69 @@ try:
 
             else:
                 print("[red]Unknown shader subcommand. Use install, list, or remove[/red]")
+
+        # ================================
+        # PRESETS MANAGEMENT
+        # ================================
+        elif shell_commands.startswith("saturn presets"):
+            parts = shlex.split(shell_commands)
+            if len(parts) < 3:
+                print("[red]Invalid preset command. Use 'saturn presets --list/--switch/--delete/--zip/--unzip'[/red]")
+                continue
+            
+            subcommand = parts[2]
+            
+            if subcommand == "--list":
+                presets = preset_manager.list_presets()
+                active_preset = preset_manager.get_active_preset()
+                
+                if not presets:
+                    print("[yellow]No presets found[/yellow]")
+                else:
+                    table = Table(title="Available Presets")
+                    table.add_column("Name", style="cyan", no_wrap=True)
+                    table.add_column("Type", style="blue")
+                    table.add_column("Status", style="green")
+                    
+                    for preset in presets:
+                        preset_name = preset['name']
+                        preset_type = "Compressed" if preset['compressed'] else "Directory"
+                        status = "● Active" if preset_name == active_preset else ""
+                        
+                        table.add_row(preset_name, preset_type, status)
+                    
+                    console.print(table)
+            
+            elif subcommand == "--switch":
+                if len(parts) < 4:
+                    print("[red]Usage: saturn presets --switch \"preset_name\"[/red]")
+                    continue
+                preset_name = parts[3]
+                preset_manager.switch_preset(preset_name)
+            
+            elif subcommand == "--delete":
+                if len(parts) < 4:
+                    print("[red]Usage: saturn presets --delete \"preset_name\"[/red]")
+                    continue
+                preset_name = parts[3]
+                preset_manager.delete_preset(preset_name)
+            
+            elif subcommand == "--zip":
+                if len(parts) < 4:
+                    print("[red]Usage: saturn presets --zip \"preset_name\"[/red]")
+                    continue
+                preset_name = parts[3]
+                preset_manager.compress_preset(preset_name)
+            
+            elif subcommand == "--unzip":
+                if len(parts) < 4:
+                    print("[red]Usage: saturn presets --unzip \"preset_name\"[/red]")
+                    continue
+                preset_name = parts[3]
+                preset_manager.decompress_preset(preset_name)
+            
+            else:
+                print("[red]Unknown preset subcommand. Use --list, --switch, --delete, --zip, or --unzip[/red]")
 
         else:
             print("[red]ERROR: Unknown command[/red]")

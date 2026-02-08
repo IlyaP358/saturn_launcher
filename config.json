@@ -8,5 +8,6 @@
     "show_snapshots": false,
     "last_version": "forge-1.20.1",
     "last_username": "",
-    "background_path": "/home/illium/.saturn_launcher/backgrounds/saturn-background.png"
+    "background_path": "/home/illium/.saturn_launcher/backgrounds/saturn-background.png",
+    "active_preset": "Test"
 }

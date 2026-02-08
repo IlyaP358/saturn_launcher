@@ -8,3 +8,4 @@ PySide6
 psutil
 pyreadline3
 requests
+py7zr
