@@ -383,11 +383,20 @@ try:
         # INSTALLED VERSIONS 
         # ================================
         elif shell_commands == saturn_installed:
-            #print installed versions
-            print(pyfiglet.figlet_format("Installed versions"))
-            print('\n'.join(versions_print))
-            versions_in = "Versions in:", os.path.abspath("versions")
-            print(versions_in)
+            # Get active preset info
+            active_preset = preset_manager.get_active_preset()
+            preset_path = preset_manager.get_preset_path(active_preset)
+            versions_path = os.path.join(preset_path, "versions")
+            
+            print(pyfiglet.figlet_format(f"Preset: {active_preset}", font='slant'))
+            print(f"[cyan]Versions location: {versions_path}[/cyan]\n")
+            
+            if os.path.exists(versions_path) and os.listdir(versions_path):
+                print("[green]Installed versions:[/green]")
+                for v in sorted(os.listdir(versions_path)):
+                    print(f" - {v}")
+            else:
+                print("[yellow]No versions installed in this preset.[/yellow]")
 
         # ================================
         # RAM SETTINGS
@@ -475,11 +484,20 @@ try:
         # START LAUNCHER (AUTO VANILLA / FORGE / FABRIC)
         # ================================
         elif shell_commands == start_launcher:
-            #print installed versions
-            print(pyfiglet.figlet_format("Installed versions"))
-            print('\n'.join(versions_print))
-            versions_in = "Versions in:", os.path.abspath("versions")
-            print(versions_in)
+            # Get active preset info
+            active_preset = preset_manager.get_active_preset()
+            preset_path = preset_manager.get_preset_path(active_preset)
+            versions_path = os.path.join(preset_path, "versions")
+
+            print(pyfiglet.figlet_format(f"Preset: {active_preset}", font='slant'))
+            print(f"[cyan]Versions location: {versions_path}[/cyan]\n")
+
+            if os.path.exists(versions_path) and os.listdir(versions_path):
+                print("[green]Installed versions:[/green]")
+                for v in sorted(os.listdir(versions_path)):
+                    print(f" - {v}")
+            else:
+                print("[yellow]No versions installed in this preset.[/yellow]")
 
             version = input("Enter version (vanilla or forge-1.xx or fabric-1.xx): ").strip()
             username = input("Enter Username: ")
