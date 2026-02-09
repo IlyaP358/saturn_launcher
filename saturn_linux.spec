@@ -10,8 +10,10 @@ datas = [
     (os.path.join(spec_dir, 'version.txt'), '.'),
 ]
 binaries = []
-hiddenimports = []
+hiddenimports = ['preset_manager']
 tmp_ret = collect_all('pyfiglet')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('py7zr')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
 # Add PNG resources

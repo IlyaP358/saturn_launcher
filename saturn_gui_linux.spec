@@ -22,13 +22,14 @@ hiddenimports = [
     # Shader download module
     'shader_download_classes',
     'update_gui_classes',
+    'preset_manager',
 ]
 
-# Collect pyfiglet data
+# Collect pyfiglet and py7zr data
 tmp_ret = collect_all('pyfiglet')
-datas += tmp_ret[0]
-binaries += tmp_ret[1]
-hiddenimports += tmp_ret[2]
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('py7zr')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
 a = Analysis(
     ['saturn-gui.py'],
