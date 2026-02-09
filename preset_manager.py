@@ -187,7 +187,7 @@ def get_active_preset():
         print(f"[yellow]Error reading config: {e}. Using default preset.[/yellow]")
         return 'default'
 
-def delete_preset(name):
+def delete_preset(name, confirm=False):
     """Delete a preset (directory or archive)"""
     if name == 'default':
         print("[red]Cannot delete the default preset![/red]")
@@ -216,12 +216,13 @@ def delete_preset(name):
         return False
     
     # Confirm deletion
-    preset_type = "archive" if preset_to_delete['compressed'] else "directory"
-    confirm = input(f"Are you sure you want to delete preset '{name}' ({preset_type})? (y/n): ").strip().lower()
-    
-    if confirm != 'y':
-        print("[yellow]Deletion cancelled[/yellow]")
-        return False
+    if not confirm:
+        preset_type = "archive" if preset_to_delete['compressed'] else "directory"
+        user_input = input(f"Are you sure you want to delete preset '{name}' ({preset_type})? (y/n): ").strip().lower()
+        
+        if user_input != 'y':
+            print("[yellow]Deletion cancelled[/yellow]")
+            return False
     
     try:
         if preset_to_delete['compressed']:

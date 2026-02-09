@@ -3,6 +3,7 @@
 
 import os
 import requests
+import preset_manager
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
@@ -222,7 +223,10 @@ class ShaderInstallThread(QThread):
             filename = primary_file["filename"]
 
             # Create shaderpacks directory
-            shaders_dir = os.path.abspath("saturn_launcher/shaderpacks")
+            active_preset = preset_manager.get_active_preset()
+            preset_path = preset_manager.get_preset_path(active_preset)
+            shaders_dir = os.path.join(preset_path, "shaderpacks")
+            
             if not os.path.exists(shaders_dir):
                 os.makedirs(shaders_dir)
 

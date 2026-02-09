@@ -108,6 +108,15 @@ class Ui_MainWindow(object):
         plus_icon = MainWindow.style().standardIcon(QStyle.SP_FileDialogNewFolder)
         self.createPresetButton.setIcon(plus_icon)
         self.presetLayout.addWidget(self.createPresetButton)
+
+        # Delete Preset Button
+        self.deletePresetButton = QPushButton(self.inputFrame)
+        self.deletePresetButton.setObjectName(u"deletePresetButton")
+        self.deletePresetButton.setFixedSize(30, 30)
+        self.deletePresetButton.setToolTip("Delete Preset")
+        trash_icon = MainWindow.style().standardIcon(QStyle.SP_TrashIcon)
+        self.deletePresetButton.setIcon(trash_icon)
+        self.presetLayout.addWidget(self.deletePresetButton)
         
         # Archive/Unarchive Button
         self.archiveButton = QPushButton(self.inputFrame)
@@ -1180,6 +1189,7 @@ class ModDownloadThread(QThread):
             for hit in data.get("hits", []):
                 mod_info = {
                     "project_id": hit.get("project_id"),
+                    "project_type": hit.get("project_type"),
                     "title": hit.get("title", "Unknown"),
                     "description": hit.get("description", ""),
                     "downloads": hit.get("downloads", 0),
@@ -1267,17 +1277,26 @@ class ModInstallThread(QThread):
             download_url = primary_file["url"]
             filename = primary_file["filename"]
 
-            # Create mods directory
-            mods_dir = os.path.abspath("saturn_launcher/mods")
-            if not os.path.exists(mods_dir):
-                os.makedirs(mods_dir)
-
-            # Download
+            # Create mods or shaderpacks directory
+            active_preset = preset_manager.get_active_preset()
+            preset_path = preset_manager.get_preset_path(active_preset)
+            
+            # Determine directory based on project type
+            target_folder = "mods"
+            if self.mod_data.get("project_type") == "shader":
+                target_folder = "shaderpacks"
+            
+            install_dir = os.path.join(preset_path, target_folder)
+            
+            if not os.path.exists(install_dir):
+                os.makedirs(install_dir)
+ 
+             # Download
             self.progress.emit(10)
             with requests.get(download_url, stream=True, timeout=30) as r:
                 r.raise_for_status()
                 total_size = int(r.headers.get('content-length', 0))
-                filepath = os.path.join(mods_dir, filename)
+                filepath = os.path.join(install_dir, filename)
 
                 with open(filepath, 'wb') as f:
                     downloaded = 0
@@ -1624,6 +1643,36 @@ def create_new_preset(ui):
         update_versions_combo(ui)
         QMessageBox.information(None, "Success", f"Created and switched to preset '{final_name}'")
 
+def delete_preset(ui):
+    """Delete a preset via selection dialog"""
+    # Get all presets
+    presets = preset_manager.list_presets()
+    active_preset = preset_manager.get_active_preset()
+    
+    # Filter out active preset (cannot delete active)
+    deletable = [p['name'] for p in presets if p['name'] != active_preset]
+    
+    if not deletable:
+        QMessageBox.information(None, "Delete Preset", "No other presets available to delete.\n\nNote: You cannot delete the currently active preset.")
+        return
+
+    # Show selection dialog
+    item, ok = QInputDialog.getItem(None, "Delete Preset", "Select preset to delete:", deletable, 0, False)
+    
+    if ok and item:
+        # Confirm deletion
+        confirm = QMessageBox.question(None, "Confirm Delete", 
+                                      f"Are you sure you want to delete preset '{item}'?\nThis action cannot be undone and will permanently delete all files in the preset.",
+                                      QMessageBox.Yes | QMessageBox.No)
+                                      
+        if confirm == QMessageBox.Yes:
+            success = preset_manager.delete_preset(item, confirm=True)
+            if success:
+                 QMessageBox.information(None, "Success", f"Preset '{item}' deleted.")
+                 update_presets_combo(ui)
+            else:
+                 QMessageBox.critical(None, "Error", f"Failed to delete preset '{item}'.")
+
 def update_preset_status(ui):
     """Update buttons based on selected preset"""
     preset_name = ui.presetComboBox.currentText()
@@ -1761,6 +1810,7 @@ if __name__ == "__main__":
     # Connect preset controls
     ui.presetComboBox.currentTextChanged.connect(lambda: on_preset_changed(ui))
     ui.createPresetButton.clicked.connect(lambda: create_new_preset(ui))
+    ui.deletePresetButton.clicked.connect(lambda: delete_preset(ui))
     ui.archiveButton.clicked.connect(lambda: toggle_archive_preset(ui))
 
     # Connect start game button
