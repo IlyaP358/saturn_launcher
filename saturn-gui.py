@@ -6,6 +6,7 @@ import sys
 import psutil
 import shutil
 import requests
+import preset_manager
 from io import BytesIO
 
 # Heavy libraries - will be imported lazily when needed:
@@ -32,7 +33,8 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog,
     QLabel, QLineEdit, QMainWindow, QMenuBar,
     QProgressBar, QPushButton, QSizePolicy, QSlider, QStatusBar, QStyle,
     QVBoxLayout, QHBoxLayout, QWidget, QMessageBox, QFrame, QFileDialog,
-    QListWidget, QListWidgetItem, QScrollArea)
+    QVBoxLayout, QHBoxLayout, QWidget, QMessageBox, QFrame, QFileDialog,
+    QListWidget, QListWidgetItem, QScrollArea, QInputDialog, QProgressDialog)
 
 class Ui_MainWindow(object):
     def __init__(self):
@@ -41,6 +43,10 @@ class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
         if not MainWindow.objectName():
             MainWindow.setObjectName(u"MainWindow")
+        
+        # Initialize presets directory
+        preset_manager.init_presets_directory()
+
         MainWindow.resize(720, 480)
         self.centralwidget = QWidget(MainWindow)
         self.centralwidget.setObjectName(u"centralwidget")
@@ -82,6 +88,37 @@ class Ui_MainWindow(object):
         self.comboBox.setObjectName(u"comboBox")
         self.comboBox.setMaxVisibleItems(8)  # Limit dropdown to show maximum 8 items at once
         self.inputLayout.addWidget(self.comboBox)
+
+        # Preset Layout
+        self.presetLayout = QHBoxLayout()
+        self.presetLayout.setObjectName(u"presetLayout")
+        self.presetLayout.setSpacing(10)
+
+        # Preset ComboBox
+        self.presetComboBox = QComboBox(self.inputFrame)
+        self.presetComboBox.setObjectName(u"presetComboBox")
+        self.presetComboBox.setMinimumWidth(200)
+        self.presetLayout.addWidget(self.presetComboBox, 2)  # Stretch factor 2
+
+        # Create New Preset Button
+        self.createPresetButton = QPushButton(self.inputFrame)
+        self.createPresetButton.setObjectName(u"createPresetButton")
+        self.createPresetButton.setFixedSize(30, 30)
+        self.createPresetButton.setToolTip("Create New Preset")
+        plus_icon = MainWindow.style().standardIcon(QStyle.SP_FileDialogNewFolder)
+        self.createPresetButton.setIcon(plus_icon)
+        self.presetLayout.addWidget(self.createPresetButton)
+        
+        # Archive/Unarchive Button
+        self.archiveButton = QPushButton(self.inputFrame)
+        self.archiveButton.setObjectName(u"archiveButton")
+        self.archiveButton.setText("Archive")
+        # self.archiveButton.setFixedWidth(100) # Let it size automatically or fixed
+        self.presetLayout.addWidget(self.archiveButton)
+        
+        # self.presetLayout.addStretch() # Maybe not needed if we want them compact
+
+        self.inputLayout.addLayout(self.presetLayout)
 
         self.pushButton = QPushButton(self.inputFrame)
         self.pushButton.setObjectName(u"pushButton")
@@ -212,6 +249,32 @@ class Ui_MainWindow(object):
     # retranslateUi
 
 
+
+class PresetThread(QThread):
+    finished = Signal(bool, str)
+    
+    def __init__(self, operation, preset_name):
+        super().__init__()
+        self.operation = operation # 'archive' or 'unzip'
+        self.preset_name = preset_name
+        
+    def run(self):
+        try:
+            success = False
+            msg = "Unknown error"
+            
+            if self.operation == 'archive':
+                success = preset_manager.compress_preset(self.preset_name)
+                msg = f"Preset '{self.preset_name}' archived successfully." if success else f"Failed to archive '{self.preset_name}'."
+            elif self.operation == 'unzip':
+                success = preset_manager.decompress_preset(self.preset_name)
+                msg = f"Preset '{self.preset_name}' decompressed successfully." if success else f"Failed to decompress '{self.preset_name}'."
+            
+            self.finished.emit(success, msg)
+        except Exception as e:
+            self.finished.emit(False, str(e))
+
+
 class LaunchThread(QThread):
     progress = Signal(int)
     show_progress = Signal()
@@ -241,7 +304,12 @@ class LaunchThread(QThread):
         try:
             print(f"Starting launch process for version: {self.version}, username: {self.username}")
 
-            minecraft_directory = os.path.abspath("saturn_launcher")
+            print(f"Starting launch process for version: {self.version}, username: {self.username}")
+            
+            # Use active preset directory
+            active_preset = preset_manager.get_active_preset()
+            minecraft_directory = preset_manager.get_preset_path(active_preset)
+            print(f"Using preset: {active_preset}")
             print(f"Using minecraft directory: {minecraft_directory}")
 
             if not os.path.exists(os.path.join(minecraft_directory, "versions")):
@@ -439,7 +507,8 @@ def is_version_installed(version):
     """Check if a version is installed"""
     import minecraft_launcher_lib  # Lazy import
     try:
-        minecraft_directory = os.path.abspath("saturn_launcher")
+        active_preset = preset_manager.get_active_preset()
+        minecraft_directory = preset_manager.get_preset_path(active_preset)
 
         if version.startswith("forge-"):
             # For Forge versions, we need to find the actual installed version name
@@ -760,7 +829,9 @@ def start_game(ui):
 
 def open_mods_folder():
     """Open the mods folder in file explorer"""
-    mods_path = os.path.abspath("saturn_launcher/mods")
+    active_preset = preset_manager.get_active_preset()
+    preset_path = preset_manager.get_preset_path(active_preset)
+    mods_path = os.path.join(preset_path, "mods")
     try:
         # Create mods folder if it doesn't exist
         if not os.path.exists(mods_path):
@@ -1489,12 +1560,194 @@ def open_mod_download_dialog(parent):
     dialog.exec()
 
 
+# ================================
+# PRESET UI FUNCTIONS
+# ================================
+
+def update_presets_combo(ui):
+    """Update the presets combobox list"""
+    ui.presetComboBox.blockSignals(True)
+    ui.presetComboBox.clear()
+    
+    presets = preset_manager.list_presets()
+    active_preset = preset_manager.get_active_preset()
+    
+    # Get icons
+    try:
+        # Use standard icons from QApplication style if possible, or fallback
+        active_icon = ui.presetComboBox.style().standardIcon(QStyle.SP_DialogYesButton)
+        folder_icon = ui.presetComboBox.style().standardIcon(QStyle.SP_DirIcon)
+        zip_icon = ui.presetComboBox.style().standardIcon(QStyle.SP_FileIcon) 
+    except:
+        active_icon = QIcon()
+        
+    for preset in presets:
+        name = preset['name']
+        ui.presetComboBox.addItem(name)
+        
+        # Set icon for active preset
+        index = ui.presetComboBox.count() - 1
+        if name == active_preset:
+            ui.presetComboBox.setItemIcon(index, active_icon)
+        elif preset.get('compressed', False):
+             # Maybe show zip icon for compressed?
+             pass
+        
+    # Select active preset
+    index = ui.presetComboBox.findText(active_preset)
+    if index >= 0:
+        ui.presetComboBox.setCurrentIndex(index)
+    
+    ui.presetComboBox.blockSignals(False)
+    update_preset_status(ui)
+
+def create_new_preset(ui):
+    """Create a new preset via dialog"""
+    name, ok = QInputDialog.getText(None, "New Preset", "Enter name for new preset:")
+    if ok and name:
+        name = name.strip()
+        if not name:
+             return
+             
+        if preset_manager.preset_exists(name):
+             QMessageBox.warning(None, "Error", f"Preset '{name}' already exists.")
+             return
+             
+        # Create it
+        final_name = preset_manager.create_preset(name)
+        
+        # Switch to it
+        preset_manager.switch_preset(final_name)
+        
+        # Update UI
+        update_presets_combo(ui)
+        update_versions_combo(ui)
+        QMessageBox.information(None, "Success", f"Created and switched to preset '{final_name}'")
+
+def update_preset_status(ui):
+    """Update buttons based on selected preset"""
+    preset_name = ui.presetComboBox.currentText()
+    
+    # Check if preset exists
+    if preset_manager.preset_exists(preset_name):
+        is_compressed = preset_manager.is_preset_compressed(preset_name)
+        
+        # Update Archive button
+        if is_compressed:
+            ui.archiveButton.setText("Unzip")
+            ui.archiveButton.setStyleSheet("background-color: #FFAA00; color: black; font-weight: bold;")
+        else:
+            ui.archiveButton.setText("Archive...")
+            ui.archiveButton.setStyleSheet("")
+            
+    else:
+        # New preset (typed in manually)
+        ui.archiveButton.setText("Archive...")
+
+def on_preset_changed(ui):
+    """Handle preset selection change"""
+    preset_name = ui.presetComboBox.currentText()
+    
+    if not preset_manager.preset_exists(preset_name):
+        update_preset_status(ui)
+        return
+
+    if preset_manager.is_preset_compressed(preset_name):
+         update_preset_status(ui)
+         return
+
+    # Auto-switch if it's a valid directory preset
+    old_preset = preset_manager.get_active_preset()
+    if preset_name != old_preset:
+        success = preset_manager.switch_preset(preset_name)
+        if success:
+             # Refresh combo to update icons (move checkmark)
+             # This will trigger on_preset_changed again but since name match active, it fall through
+             update_presets_combo(ui)
+             # Update versions list
+             update_versions_combo(ui)
+             print(f"Switched GUI to preset: {preset_name}")
+    
+    # Always ensure button state is correct (fixes bug when switching back to active preset)
+    update_preset_status(ui)
+
+def toggle_archive_preset(ui):
+    """Handle archive/unzip button click"""
+    preset_name = ui.presetComboBox.currentText()
+    
+    operation = None
+    target_preset = None
+    
+    # If selected is a compressed preset, UNZIP it
+    if preset_manager.preset_exists(preset_name) and preset_manager.is_preset_compressed(preset_name):
+        operation = 'unzip'
+        target_preset = preset_name
+
+    else:
+        # Otherwise, show Archive Dialog to choose a preset to ARCHIVE
+        presets = preset_manager.list_presets()
+        active_preset = preset_manager.get_active_preset()
+        
+        # Filter: exists, directory (not compressed), not active
+        archivable = [p['name'] for p in presets 
+                      if not p['compressed'] and p['name'] != active_preset]
+        
+        if not archivable:
+            QMessageBox.information(None, "Archive Preset", "No inactive presets available to archive.\n\nNote: You cannot archive the currently active preset.")
+            return
+            
+        item, ok = QInputDialog.getItem(None, "Archive Preset", "Select preset to archive:", archivable, 0, False)
+        
+        if ok and item:
+            confirm = QMessageBox.question(None, "Confirm Archive", 
+                                          f"Are you sure you want to archive '{item}'?\nThe original folder will be deleted after verification.",
+                                          QMessageBox.Yes | QMessageBox.No)
+            
+            if confirm == QMessageBox.Yes:
+                operation = 'archive'
+                target_preset = item
+            else:
+                return
+        else:
+            return
+
+    # Execute operation with progress dialog
+    if operation and target_preset:
+        # Create progress dialog
+        op_text = "Archiving" if operation == 'archive' else "Decompressing"
+        progress = QProgressDialog(f"{op_text} '{target_preset}'...", None, 0, 0, None)
+        progress.setWindowModality(Qt.WindowModal)
+        progress.setCancelButton(None) # Disable cancel
+        progress.show()
+        
+        ui.archiveButton.setEnabled(False)
+        
+        # Create and run thread
+        ui.preset_thread = PresetThread(operation, target_preset)
+        
+        def on_finished(success, msg):
+            progress.close()
+            ui.archiveButton.setEnabled(True)
+            if success:
+                QMessageBox.information(None, "Success", msg)
+                update_presets_combo(ui) # Refresh list
+            else:
+                QMessageBox.critical(None, "Error", msg)
+                
+        ui.preset_thread.finished.connect(on_finished)
+        ui.preset_thread.start()
+
+
+
 if __name__ == "__main__":
     import sys
     app = QApplication(sys.argv)
     MainWindow = QMainWindow()
     ui = Ui_MainWindow()
     ui.setupUi(MainWindow)
+
+    # Populate presets comboBox
+    update_presets_combo(ui)
 
     # Populate versions comboBox
     update_versions_combo(ui)
@@ -1504,6 +1757,11 @@ if __name__ == "__main__":
 
     # Connect settings button
     ui.settingsButton.clicked.connect(lambda: open_settings(MainWindow, ui))
+    
+    # Connect preset controls
+    ui.presetComboBox.currentTextChanged.connect(lambda: on_preset_changed(ui))
+    ui.createPresetButton.clicked.connect(lambda: create_new_preset(ui))
+    ui.archiveButton.clicked.connect(lambda: toggle_archive_preset(ui))
 
     # Connect start game button
     ui.pushButton.clicked.connect(lambda: start_game(ui))
